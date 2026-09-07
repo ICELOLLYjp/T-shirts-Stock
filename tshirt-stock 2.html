@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="T在庫">
+<title>Tシャツ在庫管理</title>
+<style>
+  :root {
+    --bg: #f4f3ef;
+    --card: #ffffff;
+    --border: #e2e0d8;
+    --text: #1f1e1c;
+    --text-secondary: #6b6a64;
+    --text-muted: #9a9890;
+    --accent: #185fa5;
+    --accent-bg: #e6f1fb;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17161a;
+      --card: #232228;
+      --border: #35333a;
+      --text: #f1f0ec;
+      --text-secondary: #b4b2a9;
+      --text-muted: #77756e;
+      --accent: #85b7eb;
+      --accent-bg: #0c447c;
+      --danger: #f09595;
+      --danger-bg: #501313;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  }
+  body {
+    padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 24px);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 20px 0 16px;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .tab {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .tab.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 2px solid var(--accent);
+  }
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+  }
+  .total-label { font-size: 14px; color: var(--text-secondary); }
+  .total-value { font-size: 26px; font-weight: 600; }
+  .total-unit { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+  .size-header {
+    display: flex;
+    gap: 6px;
+    padding-left: 96px;
+    margin-bottom: 8px;
+  }
+  .size-header div {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .color-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .color-row { display: flex; align-items: center; gap: 6px; }
+  .color-name {
+    width: 90px;
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .size-cell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .qty-btn {
+    width: 30px; height: 30px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+  }
+  .qty-btn:active { transform: scale(0.94); }
+  .qty-val {
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 20px;
+    text-align: center;
+  }
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .subtotal { font-size: 12px; color: var(--text-secondary); }
+  .remove-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+    color: var(--danger);
+    background: var(--danger-bg);
+    border: none;
+    border-radius: 8px;
+  }
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  input[type="text"] {
+    flex: 1;
+    height: 40px;
+    padding: 0 12px;
+    font-size: 15px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+  }
+  input[type="text"].error { border-color: var(--danger); }
+  .icon-btn {
+    width: 44px; height: 40px;
+    flex-shrink: 0;
+    font-size: 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+  }
+  .section-divider {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .empty-note {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 4px 0 12px;
+  }
+  .delete-design-btn {
+    width: 100%;
+    margin-top: 4px;
+    font-size: 13px;
+    padding: 10px;
+    color: var(--danger);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+</style>
+</head>
+<body>
+
+<h1>Tシャツ在庫管理</h1>
+<div class="tabs" id="design-tabs"></div>
+<div id="app"></div>
+
+<div class="add-row">
+  <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
+  <button class="icon-btn" id="add-color-btn">＋</button>
+</div>
+
+<div class="section-divider add-row">
+  <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
+  <button class="icon-btn" id="add-design-btn">＋</button>
+</div>
+
+<script>
+const SIZES = ['S','M','L','XL'];
+const STORAGE_KEY = 'tshirt-stock-by-design';
+
+const DEFAULT_COLORS = ['ナチュラル','ブラック','グリーン','パープル','ピンク','ベージュ','VB','VN','VP','VG'];
+const DEFAULT_DESIGNS = ['Bigwave','Share the pavement','Gull','Sink','Rays','Cherry','Squids','Whole ocean dive club','See you in water','DEEP','Safe Surf','SALTY'];
+
+function buildDefaultDesigns(){
+  const designs = {};
+  DEFAULT_DESIGNS.forEach(name => {
+    designs[name] = { colors: [...DEFAULT_COLORS], stock: {} };
+  });
+  return designs;
+}
+
+let state = {
+  designs: buildDefaultDesigns(),
+  activeDesign: DEFAULT_DESIGNS[0]
+};
+
+function ensureStock(design){
+  const d = state.designs[design];
+  d.colors.forEach(c => {
+    if(!d.stock[c]) d.stock[c] = {};
+    SIZES.forEach(s => { if(d.stock[c][s] == null) d.stock[c][s] = 0; });
+  });
+}
+
+function totalForColor(design, color){
+  const d = state.designs[design];
+  return SIZES.reduce((sum,s) => sum + (d.stock[color]?.[s] || 0), 0);
+}
+function totalForDesign(design){
+  const d = state.designs[design];
+  return d.colors.reduce((sum,c) => sum + totalForColor(design,c), 0);
+}
+
+function save(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ console.error('save failed', e); }
+}
+
+function renderTabs(){
+  const tabs = document.getElementById('design-tabs');
+  let html = '';
+  Object.keys(state.designs).forEach(name => {
+    const active = name === state.activeDesign;
+    html += `<button class="tab ${active ? 'active' : ''}" data-select-design="${name}">${name}</button>`;
+  });
+  tabs.innerHTML = html;
+  tabs.querySelectorAll('button[data-select-design]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.activeDesign = btn.getAttribute('data-select-design');
+      renderTabs();
+      render();
+      save();
+    });
+  });
+}
+
+function render(){
+  const design = state.activeDesign;
+  if(!state.designs[design]) return;
+  ensureStock(design);
+  const d = state.designs[design];
+  const app = document.getElementById('app');
+  let html = '';
+
+  html += `<div class="total-row">
+    <span class="total-label">${design} 合計在庫</span>
+    <span class="total-value">${totalForDesign(design)}<span class="total-unit"> 枚</span></span>
+  </div>`;
+
+  if(d.colors.length > 0){
+    html += '<div class="size-header">' + SIZES.map(s => `<div>${s}</div>`).join('') + '</div>';
+  } else {
+    html += '<p class="empty-note">まだ色が登録されていません。下から追加してください。</p>';
+  }
+
+  d.colors.forEach(color => {
+    html += `<div class="color-card">
+      <div class="color-row">
+        <div class="color-name">${color}</div>
+        ${SIZES.map(size => {
+          const qty = d.stock[color][size];
+          return `<div class="size-cell">
+            <button class="qty-btn" data-color="${color}" data-size="${size}" data-delta="-1">−</button>
+            <span class="qty-val">${qty}</span>
+            <button class="qty-btn" data-color="${color}" data-size="${size}" data-delta="1">＋</button>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="card-footer">
+        <span class="subtotal">小計 ${totalForColor(design,color)} 枚</span>
+        <button class="remove-btn" data-remove-color="${color}">削除</button>
+      </div>
+    </div>`;
+  });
+
+  if(Object.keys(state.designs).length > 1){
+    html += `<button class="delete-design-btn" data-remove-design="${design}">「${design}」を削除</button>`;
+  }
+
+  app.innerHTML = html;
+
+  app.querySelectorAll('button[data-color]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const color = btn.getAttribute('data-color');
+      const size = btn.getAttribute('data-size');
+      const delta = parseInt(btn.getAttribute('data-delta'));
+      const next = Math.max(0, (d.stock[color][size] || 0) + delta);
+      d.stock[color][size] = next;
+      render();
+      save();
+    });
+  });
+
+  app.querySelectorAll('button[data-remove-color]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const color = btn.getAttribute('data-remove-color');
+      d.colors = d.colors.filter(c => c !== color);
+      delete d.stock[color];
+      render();
+      save();
+    });
+  });
+
+  const removeDesignBtn = app.querySelector('button[data-remove-design]');
+  if(removeDesignBtn){
+    removeDesignBtn.addEventListener('click', () => {
+      const name = removeDesignBtn.getAttribute('data-remove-design');
+      delete state.designs[name];
+      const remaining = Object.keys(state.designs);
+      state.activeDesign = remaining[0];
+      renderTabs();
+      render();
+      save();
+    });
+  }
+}
+
+document.getElementById('add-color-btn').addEventListener('click', () => {
+  const input = document.getElementById('new-color');
+  const val = input.value.trim();
+  const d = state.designs[state.activeDesign];
+  input.classList.remove('error');
+  if(!val){
+    input.classList.add('error');
+    input.placeholder = '色の名前を入力してください';
+    return;
+  }
+  if(d.colors.includes(val)){
+    input.classList.add('error');
+    return;
+  }
+  d.colors.push(val);
+  input.value = '';
+  render();
+  save();
+});
+document.getElementById('new-color').addEventListener('input', (e) => { e.target.classList.remove('error'); });
+
+document.getElementById('add-design-btn').addEventListener('click', () => {
+  const input = document.getElementById('new-design');
+  const val = input.value.trim();
+  input.classList.remove('error');
+  if(!val){
+    input.classList.add('error');
+    input.placeholder = 'デザイン名を入力してください';
+    return;
+  }
+  if(state.designs[val]){
+    input.classList.add('error');
+    return;
+  }
+  state.designs[val] = { colors: [...DEFAULT_COLORS], stock: {} };
+  state.activeDesign = val;
+  input.value = '';
+  renderTabs();
+  render();
+  save();
+});
+document.getElementById('new-design').addEventListener('input', (e) => { e.target.classList.remove('error'); });
+
+(function init(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.designs) state = parsed;
+    }
+  } catch(e) {
+    console.log('no existing data, using defaults');
+  }
+  renderTabs();
+  render();
+})();
+</script>
+</body>
+</html>
