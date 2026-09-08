@@ -371,55 +371,57 @@
   .sync-status.error { color: var(--danger); }
   .sync-status.ok { color: var(--accent); }
 
-  .auth-card {
-    background: var(--card);
-    border: 1px solid var(--border);
+  .export-row {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 14px;
+  }
+  .export-btn {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
     border-radius: var(--radius);
-    padding: 22px;
-    margin: 8px 0 18px;
-    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--accent);
   }
-  .auth-card h2 {
-    margin: 0 0 8px;
-    font-size: 20px;
-  }
-  .auth-card p {
-    margin: 0 0 16px;
-    color: var(--text-secondary);
-    font-size: 14px;
-    line-height: 1.6;
-  }
-  .auth-row {
+
+  .meta-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    margin: -8px 0 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .meta-updated { min-width: 0; }
+  .backup-btn {
+    flex-shrink: 0;
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+  }
+  .schema-card {
     margin: 0 0 14px;
     padding: 10px 12px;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 12px;
     font-size: 12px;
     color: var(--text-secondary);
   }
-  .auth-email {
-    overflow-wrap: anywhere;
-  }
-  .auth-btn {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 14px;
-    background: var(--accent);
-    color: white;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .auth-btn.secondary {
-    background: var(--card);
-    color: var(--text);
-  }
-  #inventory-content[hidden] {
-    display: none !important;
+  .schema-card strong { color: var(--text); }
+  .schema-note {
+    margin-top: 5px;
+    line-height: 1.45;
+    color: var(--text-muted);
   }
 
 </style>
@@ -427,40 +429,35 @@
 <body>
 
 <h1>Tシャツ在庫管理</h1>
-<div id="sync-status" class="sync-status">ログインしてください</div>
-<div style="font-size:11px;color:#8a8a8a;margin-bottom:10px;">Tシャツ在庫 v2 Google Login + CSV</div>
-<div id="auth-area"></div>
+<div id="sync-status" class="sync-status">Firebaseに接続しています…</div>
+<div class="meta-row">
+  <span id="last-updated" class="meta-updated">最終更新：確認中…</span>
+  <button id="backup-json-btn" class="backup-btn" type="button">JSONバックアップ</button>
+</div>
+<div id="schema-status"></div>
+<div class="sort-row">
+  <span class="sort-label">並び替え</span>
+  <select id="sort-mode">
+    <option value="priority">★ 優先順</option>
+    <option value="stock-asc">在庫 少ない順</option>
+    <option value="stock-desc">在庫 多い順</option>
+    <option value="name">名前順</option>
+  </select>
+</div>
+<div id="stock-summary"></div>
+<div class="export-row"><button class="export-btn" id="export-inventory-btn" type="button">在庫CSVを書き出す</button></div>
+<div id="production-summary"></div>
+<div class="tabs" id="design-tabs"></div>
+<div id="app"></div>
 
-<div id="inventory-content" hidden>
-  <div id="auth-user-row" class="auth-row">
-    <span id="auth-user-email" class="auth-email"></span>
-    <button id="logout-btn" class="auth-btn secondary" type="button">ログアウト</button>
-  </div>
+<div class="add-row">
+  <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
+  <button class="icon-btn" id="add-color-btn">＋</button>
+</div>
 
-  <div class="sort-row">
-    <span class="sort-label">並び替え</span>
-    <select id="sort-mode">
-      <option value="priority">★ 優先順</option>
-      <option value="stock-asc">在庫 少ない順</option>
-      <option value="stock-desc">在庫 多い順</option>
-      <option value="name">名前順</option>
-    </select>
-    <button id="export-stock-csv-btn" class="auth-btn secondary" type="button">在庫CSV</button>
-  </div>
-  <div id="stock-summary"></div>
-  <div id="production-summary"></div>
-  <div class="tabs" id="design-tabs"></div>
-  <div id="app"></div>
-
-  <div class="add-row">
-    <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
-    <button class="icon-btn" id="add-color-btn">＋</button>
-  </div>
-
-  <div class="section-divider add-row">
-    <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
-    <button class="icon-btn" id="add-design-btn">＋</button>
-  </div>
+<div class="section-divider add-row">
+  <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
+  <button class="icon-btn" id="add-design-btn">＋</button>
 </div>
 
 <script type="module">
@@ -468,9 +465,6 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/fireba
 import {
   getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
-import {
-  getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut
-} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA1AZlnCYr5cfHG3HDcyvG17jokBnr5lO8",
@@ -484,21 +478,307 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const auth = getAuth(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
 const sharedRef = doc(db, 'tshirtStock', 'shared');
-
-let unsubscribeSnapshot = null;
-let currentUser = null;
 
 const SIZES = ['S','M','L','XL','XXL'];
 const STORAGE_KEY = 'tshirt-stock-by-design';
 const UI_STORAGE_KEY = 'tshirt-stock-ui';
+const PRE_V2_BACKUP_KEY = 'tshirt-stock-pre-v2-backup';
+const SCHEMA_VERSION = 2;
+const LEGACY_BODY_ID = 'body_unassigned';
 let cloudReady = false;
+let cloudDocument = null;
 let cloudSaveTimer = null;
 
 const DEFAULT_COLORS = ['ナチュラル','ブラック','グリーン','パープル','ピンク','ベージュ','VB','VN','VP','VG'];
 const DEFAULT_DESIGNS = ['Bigwave','Share the pavement','Gull','Sink','Rays','Cherry','Squids','Whole ocean dive club','See you in water','DEEP','Safe Surf','SALTY'];
+
+
+function stableId(prefix, name){
+  let hash = 2166136261;
+  const source = String(name ?? '');
+  for(let i = 0; i < source.length; i++){
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${prefix}_${(hash >>> 0).toString(36)}`;
+}
+
+function nowIso(){
+  return new Date().toISOString();
+}
+
+function formatTimestamp(value){
+  if(!value) return '未記録';
+  let date = null;
+  if(typeof value?.toDate === 'function') date = value.toDate();
+  else if(value instanceof Date) date = value;
+  else if(typeof value === 'string' || typeof value === 'number') date = new Date(value);
+  else if(value?.seconds != null) date = new Date(Number(value.seconds) * 1000);
+  if(!date || Number.isNaN(date.getTime())) return '未記録';
+  return new Intl.DateTimeFormat('ja-JP', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  }).format(date);
+}
+
+function renderLastUpdated(value){
+  const el = document.getElementById('last-updated');
+  if(el) el.textContent = `最終更新：${formatTimestamp(value)}`;
+}
+
+function normalizedForJson(value){
+  if(value == null) return value;
+  if(typeof value?.toDate === 'function') return value.toDate().toISOString();
+  if(Array.isArray(value)) return value.map(normalizedForJson);
+  if(typeof value === 'object'){
+    const out = {};
+    Object.entries(value).forEach(([k,v]) => out[k] = normalizedForJson(v));
+    return out;
+  }
+  return value;
+}
+
+function downloadText(filename, text, mime){
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function timestampForFilename(){
+  const n = new Date();
+  const pad = v => String(v).padStart(2,'0');
+  return `${n.getFullYear()}${pad(n.getMonth()+1)}${pad(n.getDate())}_${pad(n.getHours())}${pad(n.getMinutes())}`;
+}
+
+function exportJsonBackup(){
+  let preV2Backup = null;
+  try {
+    const raw = localStorage.getItem(PRE_V2_BACKUP_KEY);
+    if(raw) preV2Backup = JSON.parse(raw);
+  } catch(e){
+    console.error('read pre v2 backup failed', e);
+  }
+  const payload = {
+    exportedAt: nowIso(),
+    source: cloudDocument ? 'Firestore tshirtStock/shared + local UI' : 'local only',
+    firestore: normalizedForJson(cloudDocument),
+    preV2Backup: normalizedForJson(preV2Backup),
+    localState: normalizedForJson(state)
+  };
+  downloadText(
+    `tshirt_stock_backup_${timestampForFilename()}.json`,
+    JSON.stringify(payload, null, 2),
+    'application/json;charset=utf-8'
+  );
+}
+
+function createPreV2LocalBackup(docData){
+  try {
+    if(localStorage.getItem(PRE_V2_BACKUP_KEY)) return;
+    localStorage.setItem(PRE_V2_BACKUP_KEY, JSON.stringify({
+      createdAt: nowIso(),
+      firestore: normalizedForJson(docData),
+      localState: normalizedForJson(state)
+    }));
+  } catch(e){
+    console.error('pre v2 backup failed', e);
+  }
+}
+
+function buildV2SchemaFromLegacy(designs){
+  const sourceDesigns = designs || {};
+  const migratedAt = nowIso();
+
+  const bodies = {
+    [LEGACY_BODY_ID]: {
+      id: LEGACY_BODY_ID,
+      managementName: '未設定',
+      salesName: '',
+      legacy: true,
+      createdAt: migratedAt
+    }
+  };
+  const designMasters = {};
+  const colorMasters = {};
+  const sizeMasters = {};
+  const inventory = { [LEGACY_BODY_ID]: {} };
+  const productionPlan = { [LEGACY_BODY_ID]: {} };
+
+  SIZES.forEach((size, index) => {
+    const id = size.toLowerCase();
+    sizeMasters[id] = {
+      id,
+      managementName: size,
+      salesName: size,
+      order: index + 1
+    };
+  });
+
+  Object.entries(sourceDesigns).forEach(([designName, d]) => {
+    const designId = stableId('design', designName);
+    designMasters[designId] = {
+      id: designId,
+      managementName: designName,
+      salesName: designName,
+      legacyKey: designName,
+      starred: Boolean(d?.starred),
+      createdAt: migratedAt
+    };
+    inventory[LEGACY_BODY_ID][designId] = {};
+    productionPlan[LEGACY_BODY_ID][designId] = {};
+
+    const colors = Array.isArray(d?.colors) ? d.colors : [];
+    colors.forEach(colorName => {
+      const colorId = stableId('color', colorName);
+      if(!colorMasters[colorId]){
+        colorMasters[colorId] = {
+          id: colorId,
+          managementName: colorName,
+          pinkoiName: colorName,
+          legacyKey: colorName,
+          createdAt: migratedAt
+        };
+      }
+
+      const stockSizes = {};
+      const planSizes = {};
+      let hasStock = false;
+      let hasPlan = false;
+
+      SIZES.forEach(size => {
+        const sizeId = size.toLowerCase();
+        const qty = Math.max(0, Number(d?.stock?.[colorName]?.[size] || 0));
+        const planned = Math.max(0, Number(d?.planned?.[colorName]?.[size] || 0));
+
+        if(qty > 0){
+          stockSizes[sizeId] = { qty, updatedAt: migratedAt };
+          hasStock = true;
+        }
+        if(planned > 0){
+          planSizes[sizeId] = { qty: planned, updatedAt: migratedAt };
+          hasPlan = true;
+        }
+      });
+
+      if(hasStock) inventory[LEGACY_BODY_ID][designId][colorId] = stockSizes;
+      if(hasPlan) productionPlan[LEGACY_BODY_ID][designId][colorId] = planSizes;
+    });
+  });
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    masters: {
+      bodies,
+      designs: designMasters,
+      colors: colorMasters,
+      sizes: sizeMasters
+    },
+    inventory_v2: inventory,
+    production_plan_v2: productionPlan,
+    blank_stock: {},
+    print_sheets: {},
+    migration: {
+      from: 'designs',
+      version: 1,
+      migratedAt,
+      legacyBodyId: LEGACY_BODY_ID,
+      note: 'Existing stock copied without changing legacy designs. Body is temporarily unassigned.'
+    }
+  };
+}
+
+
+function buildLegacyMirrorPatch(){
+  const built = buildV2SchemaFromLegacy(state.designs);
+  const currentMasters = cloudDocument?.masters || {};
+
+  const bodies = { ...(currentMasters.bodies || {}) };
+  if(!bodies[LEGACY_BODY_ID]) bodies[LEGACY_BODY_ID] = built.masters.bodies[LEGACY_BODY_ID];
+
+  const designs = { ...(currentMasters.designs || {}) };
+  Object.entries(built.masters.designs).forEach(([id, item]) => {
+    if(designs[id]){
+      designs[id] = {
+        ...item,
+        ...designs[id],
+        legacyKey: item.legacyKey,
+        starred: item.starred
+      };
+    } else {
+      designs[id] = item;
+    }
+  });
+
+  const colors = { ...(currentMasters.colors || {}) };
+  Object.entries(built.masters.colors).forEach(([id, item]) => {
+    colors[id] = colors[id] ? { ...item, ...colors[id], legacyKey: item.legacyKey } : item;
+  });
+
+  const sizes = { ...(currentMasters.sizes || {}) };
+  Object.entries(built.masters.sizes).forEach(([id, item]) => {
+    if(!sizes[id]) sizes[id] = item;
+  });
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    masters: { bodies, designs, colors, sizes },
+    inventory_v2: {
+      ...(cloudDocument?.inventory_v2 || {}),
+      [LEGACY_BODY_ID]: built.inventory_v2[LEGACY_BODY_ID]
+    },
+    production_plan_v2: {
+      ...(cloudDocument?.production_plan_v2 || {}),
+      [LEGACY_BODY_ID]: built.production_plan_v2[LEGACY_BODY_ID]
+    }
+  };
+}
+
+function schemaCounts(docData){
+  const masters = docData?.masters || {};
+  return {
+    bodies: Object.keys(masters.bodies || {}).length,
+    designs: Object.keys(masters.designs || {}).length,
+    colors: Object.keys(masters.colors || {}).length,
+    sizes: Object.keys(masters.sizes || {}).length
+  };
+}
+
+function renderSchemaStatus(docData){
+  const box = document.getElementById('schema-status');
+  if(!box) return;
+  const version = Number(docData?.schemaVersion || 1);
+  if(version < SCHEMA_VERSION){
+    box.innerHTML = `<div class="schema-card"><strong>データ構造 v1</strong><div class="schema-note">既存在庫を保護しながら v2 を準備しています。</div></div>`;
+    return;
+  }
+  const c = schemaCounts(docData);
+  box.innerHTML = `<div class="schema-card">
+    <strong>データ構造 v2 準備済み</strong>
+    <div>Body ${c.bodies} / Design ${c.designs} / Color ${c.colors} / Size ${c.sizes}</div>
+    <div class="schema-note">既存の designs は変更せず保持しています。既存在庫は v2 の「未設定」Body にコピー済みです。</div>
+  </div>`;
+}
+
+async function ensureV2Schema(docData){
+  if(Number(docData?.schemaVersion || 1) >= SCHEMA_VERSION && docData?.masters && docData?.inventory_v2){
+    return docData;
+  }
+  createPreV2LocalBackup(docData);
+  const v2 = buildV2SchemaFromLegacy(docData?.designs || state.designs);
+  await setDoc(sharedRef, {
+    ...v2,
+    migratedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+  return { ...docData, ...v2 };
+}
 
 function buildDefaultDesigns(){
   const designs = {};
@@ -667,48 +947,41 @@ function renderProductionSummary(){
     </div>`;
 }
 
-function showLoginScreen(message = 'Googleアカウントでログインしてください。'){
-  const authArea = document.getElementById('auth-area');
-  const content = document.getElementById('inventory-content');
-  content.hidden = true;
-  authArea.innerHTML = `
-    <div class="auth-card">
-      <h2>在庫管理にログイン</h2>
-      <p>${message}</p>
-      <button id="google-login-btn" class="auth-btn" type="button">Googleでログイン</button>
-    </div>
-  `;
-  document.getElementById('google-login-btn').addEventListener('click', async () => {
-    try {
-      setSyncStatus('Googleログイン中…');
-      await signInWithPopup(auth, googleProvider);
-    } catch(e){
-      console.error('login failed', e);
-      setSyncStatus('ログインエラー', 'error');
-    }
-  });
-}
 
-function showAccessDenied(email = ''){
-  const authArea = document.getElementById('auth-area');
-  const content = document.getElementById('inventory-content');
-  content.hidden = true;
-  authArea.innerHTML = `
-    <div class="auth-card">
-      <h2>アクセスできません</h2>
-      <p>このGoogleアカウントにはアクセス権がありません。<br>${email}</p>
-      <button id="denied-logout-btn" class="auth-btn secondary" type="button">ログアウト</button>
-    </div>
-  `;
-  document.getElementById('denied-logout-btn').addEventListener('click', async () => {
-    await signOut(auth);
+function exportInventoryCsv(){
+  const rows = [['デザイン','色','サイズ','在庫数','制作予定','優先']];
+  Object.keys(state.designs).forEach(design => {
+    ensureStock(design);
+    const d = state.designs[design];
+    d.colors.forEach(color => {
+      SIZES.forEach(size => {
+        const stock = Number(d.stock?.[color]?.[size] || 0);
+        const planned = Number(d.planned?.[color]?.[size] || 0);
+        if(stock > 0 || planned > 0){
+          rows.push([design, color, size, stock, planned, d.starred ? '★' : '']);
+        }
+      });
+    });
   });
-}
 
-function showInventoryForUser(user){
-  document.getElementById('auth-area').innerHTML = '';
-  document.getElementById('auth-user-email').textContent = user?.email || '';
-  document.getElementById('inventory-content').hidden = false;
+  const csv = rows.map(row => row.map(value => {
+    const text = String(value ?? '');
+    return '"' + text.replace(/"/g, '""') + '"';
+  }).join(',')).join('\r\n');
+
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tshirt_inventory_${y}${m}${d}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function setSyncStatus(text, mode = ''){
@@ -734,10 +1007,12 @@ async function saveCloudNow(){
   if(!cloudReady) return;
   setSyncStatus('同期中…');
   try {
+    const v2Mirror = buildLegacyMirrorPatch();
     await setDoc(sharedRef, {
       designs: state.designs,
+      ...v2Mirror,
       updatedAt: serverTimestamp()
-    });
+    }, { merge: true });
     setSyncStatus('共有済み', 'ok');
   } catch(e){
     console.error('cloud save failed', e);
@@ -968,59 +1243,8 @@ document.getElementById('sort-mode').addEventListener('change', (e) => {
   saveLocal();
 });
 
-function csvEscape(value){
-  const str = String(value ?? '');
-  if(/[",\n\r]/.test(str)){
-    return '"' + str.replace(/"/g, '""') + '"';
-  }
-  return str;
-}
-
-function exportStockCsv(){
-  const rows = [
-    ['デザイン','カラー','サイズ','現在庫','制作予定','デザイン総在庫']
-  ];
-
-  Object.keys(state.designs).forEach(design => {
-    ensureStock(design);
-    const d = state.designs[design];
-    const designTotal = totalForDesign(design);
-
-    d.colors.forEach(color => {
-      SIZES.forEach(size => {
-        rows.push([
-          design,
-          color,
-          size,
-          d.stock?.[color]?.[size] || 0,
-          d.planned?.[color]?.[size] || 0,
-          designTotal
-        ]);
-      });
-    });
-  });
-
-  const csv = '\uFEFF' + rows
-    .map(row => row.map(csvEscape).join(','))
-    .join('\r\n');
-
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-
-  a.href = url;
-  a.download = `tshirt_inventory_${y}${m}${d}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-document.getElementById('export-stock-csv-btn').addEventListener('click', exportStockCsv);
+document.getElementById('export-inventory-btn').addEventListener('click', exportInventoryCsv);
+document.getElementById('backup-json-btn').addEventListener('click', exportJsonBackup);
 
 async function init(){
   try {
@@ -1049,92 +1273,73 @@ async function init(){
 
   renderTabs();
   render();
+  renderSchemaStatus(null);
+  renderLastUpdated(null);
 
   try {
     setSyncStatus('Firebaseに接続しています…');
     const snap = await getDoc(sharedRef);
 
-    if(snap.exists() && snap.data()?.designs){
-      state.designs = snap.data().designs;
-      Object.values(state.designs).forEach(d => {
-        if(d.starred == null) d.starred = false;
-        if(!d.planned) d.planned = {};
-      });
-      if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
-      saveLocal();
+    if(snap.exists()){
+      cloudDocument = snap.data();
+      if(cloudDocument?.designs){
+        state.designs = cloudDocument.designs;
+        Object.values(state.designs).forEach(d => {
+          if(d.starred == null) d.starred = false;
+          if(!d.planned) d.planned = {};
+        });
+        if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
+        saveLocal();
+      }
+      cloudDocument = await ensureV2Schema(cloudDocument);
     } else {
+      createPreV2LocalBackup({ designs: state.designs });
+      const v2 = buildV2SchemaFromLegacy(state.designs);
       await setDoc(sharedRef, {
         designs: state.designs,
-        updatedAt: serverTimestamp()
-      });
+        ...v2,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        migratedAt: serverTimestamp()
+      }, { merge: true });
+      cloudDocument = { designs: state.designs, ...v2 };
     }
 
     cloudReady = true;
-    showInventoryForUser(currentUser);
     setSyncStatus('共有済み', 'ok');
+    renderLastUpdated(cloudDocument?.updatedAt || cloudDocument?.migration?.migratedAt);
+    renderSchemaStatus(cloudDocument);
     renderTabs();
     render();
 
-    if(unsubscribeSnapshot) unsubscribeSnapshot();
-    unsubscribeSnapshot = onSnapshot(sharedRef, (snapshot) => {
-      if(!snapshot.exists() || !snapshot.data()?.designs) return;
-      state.designs = snapshot.data().designs;
-      Object.values(state.designs).forEach(d => {
-        if(d.starred == null) d.starred = false;
-        if(!d.planned) d.planned = {};
-      });
-      if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
-      saveLocal();
-      renderTabs();
-      render();
+    onSnapshot(sharedRef, (snapshot) => {
+      if(!snapshot.exists()) return;
+      cloudDocument = snapshot.data();
+      if(cloudDocument?.designs){
+        state.designs = cloudDocument.designs;
+        Object.values(state.designs).forEach(d => {
+          if(d.starred == null) d.starred = false;
+          if(!d.planned) d.planned = {};
+        });
+        if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
+        saveLocal();
+        renderTabs();
+        render();
+      }
+      renderLastUpdated(cloudDocument?.updatedAt || cloudDocument?.migratedAt);
+      renderSchemaStatus(cloudDocument);
       setSyncStatus(snapshot.metadata.hasPendingWrites ? '同期中…' : '共有済み', snapshot.metadata.hasPendingWrites ? '' : 'ok');
     }, (error) => {
       console.error('snapshot error', error);
-      const code = error?.code ? ` (${error.code})` : '';
-      setSyncStatus('同期エラー' + code, 'error');
+      setSyncStatus('同期エラー：Firestoreの設定を確認してください', 'error');
     });
   } catch(e) {
     console.error('firebase init failed', e);
-    cloudReady = false;
-    if(e?.code === 'permission-denied'){
-      showAccessDenied(currentUser?.email || '');
-      setSyncStatus('このアカウントは許可されていません', 'error');
-      return;
-    }
-    const code = e?.code ? ` (${e.code})` : '';
-    setSyncStatus('同期エラー' + code, 'error');
+    setSyncStatus('同期エラー：Firestore Databaseを作成し、ルールを確認してください', 'error');
   }
 }
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
-  if(unsubscribeSnapshot){
-    unsubscribeSnapshot();
-    unsubscribeSnapshot = null;
-  }
-  cloudReady = false;
-  await signOut(auth);
-});
-
-showLoginScreen();
-
-onAuthStateChanged(auth, async (user) => {
-  if(unsubscribeSnapshot){
-    unsubscribeSnapshot();
-    unsubscribeSnapshot = null;
-  }
-
-  currentUser = user || null;
-  cloudReady = false;
-
-  if(!user){
-    setSyncStatus('ログインしてください');
-    showLoginScreen();
-    return;
-  }
-
-  setSyncStatus('アクセス権を確認しています…');
-  await init();
-});
+init();
 </script>
 </body>
 </html>
