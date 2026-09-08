@@ -427,7 +427,7 @@
 
   .main-nav {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 6px;
     margin: 0 0 12px;
     position: sticky;
@@ -881,7 +881,6 @@
 <div id="schema-status"></div>
 <nav class="main-nav" id="main-nav">
   <button type="button" data-view="finished" class="active">完成品</button>
-  <button type="button" data-view="assign">Body振分</button>
   <button type="button" data-view="blank">未プリント</button>
   <button type="button" data-view="sheets">シート</button>
   <button type="button" data-view="plan">制作予定</button>
@@ -904,11 +903,11 @@
 
 <div id="color-settings-panel" class="color-settings-panel" hidden>
   <div class="section-title">Colorマスター</div>
-  <div class="section-note">ColorごとにBodyを紐づけます。完成品と未プリント在庫はこの設定で自動的に絞り込みます。</div>
+  <div class="section-note">ColorごとのBody設定を正解として扱います。完成品在庫のBodyはこの設定に合わせて自動整理し、完成品と未プリント在庫も自動的に絞り込みます。</div>
   <div id="color-mapping-warning"></div>
   <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>Body</span></div>
   <div id="color-master-list"></div>
-  <div class="color-mapping-note">現在の完成品在庫からBodyが一意に分かるColorは自動設定します。</div>
+  <div class="color-mapping-note">完成品在庫はColorマスターのBody設定を基準に自動整理します。Body振り分けを在庫ごとに行う必要はありません。</div>
 </div>
 
 <section id="view-finished" class="view-panel">
@@ -921,7 +920,7 @@
       </div>
       <div id="finished-body-total" class="finished-body-total"></div>
     </div>
-    <div class="master-sync-note">ここで変更した在庫を tshirtStock/master に保存し、Body合計を tshirtStock/shared へ自動同期します。</div>
+    <div class="master-sync-note">Colorマスターで決まったBodyの在庫を tshirtStock/master に保存し、全Body合計を tshirtStock/shared へ自動同期します。</div>
     <div class="finished-filter-note">選択したBodyに紐づくColorだけを表示します。</div>
   </div>
   <div class="sort-row">
@@ -1018,6 +1017,7 @@ let masterDocument = null;
 let masterReady = false;
 let masterError = null;
 let cloudSaveTimer = null;
+let colorAuthorityNormalizeBusy = false;
 
 const DEFAULT_COLORS = ['ナチュラル','ブラック','グリーン','パープル','ピンク','ベージュ','VB','VN','VP','VG'];
 const DEFAULT_DESIGNS = ['Bigwave','Share the pavement','Gull','Sink','Rays','Cherry','Squids','Whole ocean dive club','See you in water','DEEP','Safe Surf','SALTY'];
@@ -1357,7 +1357,7 @@ function renderSchemaStatus(docData = masterDocument, status = ''){
     <strong>${authoritative ? '実在庫マスター運用中' : 'データ構造 v2 準備済み'}</strong>
     <div>Body ${c.bodies} / Design ${c.designs} / Color ${c.colors} / Size ${c.sizes}</div>
     <div class="schema-note">${authoritative
-      ? 'tshirtStock/master を実在庫の正本として使用し、Bodyを合算した数量を tshirtStock/shared へ自動同期しています。'
+      ? 'tshirtStock/master を実在庫の正本として使用します。ColorマスターからBodyを自動判定し、全Bodyを合算した数量を tshirtStock/shared へ自動同期しています。'
       : 'Body振り分け完了後、tshirtStock/master を実在庫の正本へ切り替えます。'}</div>
   </div>`;
 }
@@ -1721,6 +1721,114 @@ async function inferColorBodyMappings(){
   return true;
 }
 
+function inventoryBodyFingerprint(inventory){
+  const rows = [];
+  Object.entries(inventory || {}).forEach(([bodyId, designTree]) => {
+    Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+      Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+        Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+          const qty = Math.max(0, Number(cell?.qty || 0));
+          if(qty > 0) rows.push(`${bodyId}\u241f${designId}\u241f${colorId}\u241f${sizeId}\u241f${qty}`);
+        });
+      });
+    });
+  });
+  return rows.sort().join('\u241e');
+}
+
+function inventoryGrandTotalIncludingLegacy(inventory){
+  let total = 0;
+  Object.values(inventory || {}).forEach(designTree => {
+    Object.values(designTree || {}).forEach(colorTree => {
+      Object.values(colorTree || {}).forEach(sizeTree => {
+        Object.values(sizeTree || {}).forEach(cell => {
+          total += Math.max(0, Number(cell?.qty || 0));
+        });
+      });
+    });
+  });
+  return total;
+}
+
+async function ensureKnownColorMappings(){
+  if(!inventoryAuthorityActive() || !masterDocument?.masters?.colors) return false;
+  const bodies = assignableBodies();
+  const organic = bodies.find(body => String(body.managementName || '').trim().toLowerCase() === 'organic');
+  if(!organic) return false;
+
+  const colorsMap = { ...(masterDocument.masters.colors || {}) };
+  let changed = false;
+  Object.entries(colorsMap).forEach(([colorId, color]) => {
+    const name = String(color.managementName || color.legacyKey || '').trim();
+    // ユーザー確認済み: ナチュラルはすべて Organic。
+    if(name === 'ナチュラル' && color.bodyId !== organic.id){
+      colorsMap[colorId] = { ...color, bodyId: organic.id, updatedAt: nowIso() };
+      changed = true;
+    }
+  });
+  if(!changed) return false;
+  const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
+  masterDocument = { ...masterDocument, masters };
+  return await saveMasterData({ masters });
+}
+
+async function normalizeFinishedInventoryByColorMaster(){
+  if(!inventoryAuthorityActive() || !masterDocument?.inventory_v2 || colorAuthorityNormalizeBusy) return false;
+  colorAuthorityNormalizeBusy = true;
+  try {
+    const source = structuredClone(masterDocument.inventory_v2 || {});
+    const colors = masterDocument.masters?.colors || {};
+    const next = {};
+
+    Object.entries(source).forEach(([sourceBodyId, designTree]) => {
+      Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+        Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+          const mappedBodyId = colors[colorId]?.bodyId || '';
+          const targetBodyId = mappedBodyId || sourceBodyId;
+          if(!next[targetBodyId]) next[targetBodyId] = {};
+          if(!next[targetBodyId][designId]) next[targetBodyId][designId] = {};
+          if(!next[targetBodyId][designId][colorId]) next[targetBodyId][designId][colorId] = {};
+
+          Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+            const qty = Math.max(0, Number(cell?.qty || 0));
+            if(qty <= 0) return;
+            const before = Math.max(0, Number(next[targetBodyId][designId][colorId]?.[sizeId]?.qty || 0));
+            next[targetBodyId][designId][colorId][sizeId] = {
+              qty: before + qty,
+              updatedAt: mappedBodyId && mappedBodyId !== sourceBodyId ? nowIso() : (cell?.updatedAt || nowIso())
+            };
+          });
+        });
+      });
+    });
+
+    const beforeTotal = inventoryGrandTotalIncludingLegacy(source);
+    const afterTotal = inventoryGrandTotalIncludingLegacy(next);
+    if(beforeTotal !== afterTotal){
+      console.error('Color authority normalization blocked: total mismatch', { beforeTotal, afterTotal });
+      return false;
+    }
+    if(inventoryBodyFingerprint(source) === inventoryBodyFingerprint(next)) return false;
+
+    masterDocument = {
+      ...masterDocument,
+      inventory_v2: next,
+      colorBodyAuthority: true,
+      colorBodyNormalizedAt: nowIso()
+    };
+    const saved = await saveMasterData({
+      inventory_v2: next,
+      colorBodyAuthority: true,
+      colorBodyNormalizedAt: nowIso()
+    });
+    if(saved === false) return false;
+    await syncSharedFromMaster();
+    return true;
+  } finally {
+    colorAuthorityNormalizeBusy = false;
+  }
+}
+
 function renderColorSettings(){
   const panel = document.getElementById('color-settings-panel');
   const list = document.getElementById('color-master-list');
@@ -1737,7 +1845,7 @@ function renderColorSettings(){
   const colors = masterColors();
   const stats = colorMappingStats();
   if(stats.ambiguous > 0){
-    warning.innerHTML = `<div class="color-mapping-warning">${stats.ambiguous}色は現在複数Bodyに完成品在庫があります。Bodyを一意に決める前に在庫内容を確認してください。</div>`;
+    warning.innerHTML = `<div class="color-mapping-warning">${stats.ambiguous}色は複数Bodyに在庫があります。Body設定済みのColorは自動的に正しいBodyへ整理します。</div>`;
   } else if(stats.unmapped > 0){
     warning.innerHTML = `<div class="color-mapping-warning">Body未設定のColorが${stats.unmapped}色あります。</div>`;
   } else {
@@ -1754,7 +1862,7 @@ function renderColorSettings(){
     return `<div class="color-master-row">
       <input type="text" data-color-management="${escapeHtml(color.id)}" value="${escapeHtml(color.managementName || '')}" readonly>
       <input type="text" data-color-sales="${escapeHtml(color.id)}" value="${escapeHtml(color.pinkoiName || color.managementName || '')}" placeholder="販売用名称">
-      <select data-color-body="${escapeHtml(color.id)}" ${hasConflict ? 'disabled' : ''}>${options}</select>
+      <select data-color-body="${escapeHtml(color.id)}" data-color-conflict="${hasConflict ? '1' : '0'}">${options}</select>
     </div>`;
   }).join('');
 
@@ -1775,19 +1883,52 @@ function renderColorSettings(){
     select.addEventListener('change', async () => {
       const id = select.getAttribute('data-color-body');
       const nextBodyId = select.value;
+      const colorsMap = { ...(masterDocument.masters?.colors || {}) };
+      if(!colorsMap[id]) return;
+
       const usage = colorUsageBodyIds(id);
       const conflictingUsage = usage.filter(bodyId => nextBodyId && bodyId !== nextBodyId);
+      let inventory = structuredClone(masterDocument.inventory_v2 || {});
+
       if(conflictingUsage.length){
-        alert('このColorの完成品在庫は別のBodyにあります。現在の在庫を確認してからBody設定を変更してください。');
+        const colorName = colorsMap[id]?.managementName || 'このColor';
+        const bodyName = (masterDocument.masters?.bodies || {})[nextBodyId]?.managementName || '選択Body';
+        const sourceNames = conflictingUsage.map(bodyId => (masterDocument.masters?.bodies || {})[bodyId]?.managementName || bodyId).join('、');
+        const ok = confirm(`${colorName} は現在 ${sourceNames} に完成品在庫があります。\n${colorName} の完成品在庫をすべて ${bodyName} に移動して、ColorのBodyを ${bodyName} に確定しますか？\n在庫合計は変わりません。`);
+        if(!ok){
+          renderColorSettings();
+          return;
+        }
+
+        if(!inventory[nextBodyId]) inventory[nextBodyId] = {};
+        Object.entries(inventory).forEach(([bodyId, designTree]) => {
+          if(bodyId === LEGACY_BODY_ID || bodyId === nextBodyId) return;
+          Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+            const sourceSizeTree = colorTree?.[id];
+            if(!sourceSizeTree) return;
+            if(!inventory[nextBodyId][designId]) inventory[nextBodyId][designId] = {};
+            if(!inventory[nextBodyId][designId][id]) inventory[nextBodyId][designId][id] = {};
+            Object.entries(sourceSizeTree || {}).forEach(([sizeId, cell]) => {
+              const qty = Math.max(0, Number(cell?.qty || 0));
+              if(qty <= 0) return;
+              const before = Math.max(0, Number(inventory[nextBodyId]?.[designId]?.[id]?.[sizeId]?.qty || 0));
+              inventory[nextBodyId][designId][id][sizeId] = { qty: before + qty, updatedAt: nowIso() };
+            });
+            delete inventory[bodyId][designId][id];
+            if(!Object.keys(inventory[bodyId][designId] || {}).length) delete inventory[bodyId][designId];
+          });
+        });
+      }
+
+      colorsMap[id] = { ...colorsMap[id], bodyId: nextBodyId || '', updatedAt: nowIso() };
+      const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
+      masterDocument = { ...masterDocument, masters, inventory_v2: inventory };
+      const saved = await saveMasterData({ masters, inventory_v2: inventory });
+      if(saved === false){
         renderColorSettings();
         return;
       }
-      const colorsMap = { ...(masterDocument.masters?.colors || {}) };
-      if(!colorsMap[id]) return;
-      colorsMap[id] = { ...colorsMap[id], bodyId: nextBodyId || '', updatedAt: nowIso() };
-      const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
-      masterDocument = { ...masterDocument, masters };
-      await saveMasterData({ masters });
+      if(inventoryAuthorityActive()) await syncSharedFromMaster();
       renderCurrentView();
       renderColorSettings();
     });
@@ -2674,7 +2815,7 @@ function renderPlanEditor(){
 }
 
 function setActiveView(view){
-  const allowed = ['finished','assign','blank','sheets','plan'];
+  const allowed = ['finished','blank','sheets','plan'];
   state.activeView = allowed.includes(view) ? view : 'finished';
   document.querySelectorAll('#main-nav button[data-view]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-view') === state.activeView));
   allowed.forEach(name => {
@@ -3177,7 +3318,9 @@ async function init(){
       if(!inventoryAuthorityActive()) await reconcileBodyAssignmentFromShared(true);
       await maybeActivateMasterAuthority();
       if(inventoryAuthorityActive()){
+        await ensureKnownColorMappings();
         await inferColorBodyMappings();
+        await normalizeFinishedInventoryByColorMaster();
         await syncSharedFromMaster();
       }
       renderCurrentView();
@@ -3226,7 +3369,11 @@ async function init(){
         masterReady = true;
         renderSchemaStatus(masterDocument);
         renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt);
-        if(inventoryAuthorityActive()) setTimeout(() => syncSharedFromMaster(), 20);
+        if(inventoryAuthorityActive()) setTimeout(async () => {
+          await ensureKnownColorMappings();
+          await normalizeFinishedInventoryByColorMaster();
+          await syncSharedFromMaster();
+        }, 20);
         renderCurrentView();
       }, (error) => {
         console.error('master snapshot error', error);
