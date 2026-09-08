@@ -624,6 +624,19 @@
     text-align: center;
     font-weight: 700;
   }
+  .sheet-qty-control {
+    display: grid;
+    grid-template-columns: 24px minmax(22px, 1fr) 24px;
+    align-items: center;
+    gap: 2px;
+  }
+  .sheet-qty-control .mini-qty-btn {
+    width: 24px;
+    height: 28px;
+  }
+  .sheet-qty-control .mini-qty-val {
+    font-size: 13px;
+  }
   .order-input {
     width: 100%;
     min-width: 0;
@@ -2881,34 +2894,52 @@ function renderSheetInventory(){
   const sheet = masterDocument.print_sheets || {};
   const orders = masterDocument.sheet_orders || {};
   const designs = masterDesigns();
-  box.innerHTML = `<div class="sheet-head"><span>Design</span><span>在庫</span><span>発注</span></div><div class="sheet-list">${designs.map(design => `
+  box.innerHTML = `<div class="sheet-head"><span>Design</span><span>在庫</span><span>発注</span></div><div class="sheet-list">${designs.map(design => {
+    const stockQty = Math.max(0, Number(sheet?.[design.id]?.qty || 0));
+    const orderQty = Math.max(0, Number(orders?.[design.id]?.qty || 0));
+    return `
     <div class="sheet-row">
       <div class="sheet-name">${design.starred ? '★ ' : ''}${escapeHtml(design.managementName)}</div>
-      <input class="sheet-input" type="number" min="0" inputmode="numeric" data-sheet-design="${escapeHtml(design.id)}" value="${Math.max(0, Number(sheet?.[design.id]?.qty || 0))}">
-      <input class="order-input" type="number" min="0" inputmode="numeric" data-sheet-order="${escapeHtml(design.id)}" value="${Math.max(0, Number(orders?.[design.id]?.qty || 0))}">
-    </div>`).join('')}</div>`;
-  box.querySelectorAll('input[data-sheet-design]').forEach(input => {
-    input.addEventListener('change', async () => {
-      const designId = input.getAttribute('data-sheet-design');
-      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      <div class="sheet-qty-control">
+        <button class="mini-qty-btn" type="button" data-sheet-delta="-1" data-sheet-design="${escapeHtml(design.id)}">−</button>
+        <span class="mini-qty-val">${stockQty}</span>
+        <button class="mini-qty-btn" type="button" data-sheet-delta="1" data-sheet-design="${escapeHtml(design.id)}">＋</button>
+      </div>
+      <div class="sheet-qty-control">
+        <button class="mini-qty-btn" type="button" data-sheet-order-delta="-1" data-sheet-order="${escapeHtml(design.id)}">−</button>
+        <span class="mini-qty-val">${orderQty}</span>
+        <button class="mini-qty-btn" type="button" data-sheet-order-delta="1" data-sheet-order="${escapeHtml(design.id)}">＋</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+
+  box.querySelectorAll('button[data-sheet-delta]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const designId = btn.getAttribute('data-sheet-design');
+      const delta = parseInt(btn.getAttribute('data-sheet-delta'), 10) || 0;
+      const current = Math.max(0, Number(masterDocument?.print_sheets?.[designId]?.qty || 0));
+      const qty = Math.max(0, current + delta);
       const next = { ...(masterDocument.print_sheets || {}) };
       if(qty > 0) next[designId] = { qty, updatedAt: nowIso() };
       else delete next[designId];
       masterDocument = { ...masterDocument, print_sheets: next };
-      await saveMasterData({ print_sheets: next });
       renderSheetInventory();
+      await saveMasterData({ print_sheets: next });
     });
   });
-  box.querySelectorAll('input[data-sheet-order]').forEach(input => {
-    input.addEventListener('change', async () => {
-      const designId = input.getAttribute('data-sheet-order');
-      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+
+  box.querySelectorAll('button[data-sheet-order-delta]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const designId = btn.getAttribute('data-sheet-order');
+      const delta = parseInt(btn.getAttribute('data-sheet-order-delta'), 10) || 0;
+      const current = Math.max(0, Number(masterDocument?.sheet_orders?.[designId]?.qty || 0));
+      const qty = Math.max(0, current + delta);
       const next = { ...(masterDocument.sheet_orders || {}) };
       if(qty > 0) next[designId] = { qty, updatedAt: nowIso() };
       else delete next[designId];
       masterDocument = { ...masterDocument, sheet_orders: next };
-      await saveMasterData({ sheet_orders: next });
       renderSheetInventory();
+      await saveMasterData({ sheet_orders: next });
     });
   });
 }
