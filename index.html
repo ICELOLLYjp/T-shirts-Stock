@@ -950,11 +950,105 @@
     color: var(--text-secondary);
   }
 
+  .auth-gate {
+    min-height: calc(100vh - 40px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 0;
+  }
+  .auth-gate[hidden] { display: none !important; }
+  .auth-card {
+    width: 100%;
+    padding: 22px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    text-align: center;
+  }
+  .auth-title {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .auth-note {
+    margin: 0 0 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .auth-btn {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--card);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .auth-btn.primary {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .auth-error {
+    margin-top: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--danger);
+  }
+  .inventory-shell[hidden] { display: none !important; }
+  .account-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: -8px 0 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .account-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .logout-btn {
+    flex-shrink: 0;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
 </style>
 </head>
 <body>
 
+<div id="auth-gate" class="auth-gate">
+  <div class="auth-card">
+    <div class="auth-title">Tシャツ在庫管理</div>
+    <div class="auth-note">ICELOLLYの管理アカウントでログインしてください。</div>
+    <button id="google-login-btn" class="auth-btn primary" type="button">Googleでログイン</button>
+    <div id="auth-message" class="auth-error"></div>
+  </div>
+</div>
+
+<div id="inventory-shell" class="inventory-shell" hidden>
 <h1>Tシャツ在庫管理</h1>
+<div class="account-row">
+  <span id="account-email" class="account-email"></span>
+  <button id="logout-btn" class="logout-btn" type="button">ログアウト</button>
+</div>
 <div id="sync-status" class="sync-status">Firebaseに接続しています…</div>
 <div class="meta-row">
   <div class="meta-dates">
@@ -1068,9 +1162,14 @@
   <div class="tabs" id="plan-design-tabs"></div>
   <div id="plan-app"></div>
 </section>
+</div>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import {
+  getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut,
+  setPersistence, browserLocalPersistence
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
@@ -1086,6 +1185,16 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+const ALLOWED_EMAILS = new Set([
+  'fjmthrs@gmail.com',
+  'icelolly.zakka@gmail.com',
+  'maki.peko.126@gmail.com'
+].map(email => email.toLowerCase()));
+let appInitialized = false;
+
 const db = getFirestore(firebaseApp);
 const sharedRef = doc(db, 'tshirtStock', 'shared');
 const masterRef = doc(db, 'tshirtStock', 'master');
@@ -3582,7 +3691,92 @@ async function init(){
   }
 }
 
-init();
+function normalizedEmail(value){
+  return String(value || '').trim().toLowerCase();
+}
+
+function isAllowedUser(user){
+  const email = normalizedEmail(user?.email);
+  return Boolean(user && user.emailVerified && ALLOWED_EMAILS.has(email));
+}
+
+function showLoginGate(message = ''){
+  const gate = document.getElementById('auth-gate');
+  const shell = document.getElementById('inventory-shell');
+  const msg = document.getElementById('auth-message');
+  if(gate) gate.hidden = false;
+  if(shell) shell.hidden = true;
+  if(msg) msg.textContent = message;
+}
+
+function showInventoryForUser(user){
+  const gate = document.getElementById('auth-gate');
+  const shell = document.getElementById('inventory-shell');
+  const email = document.getElementById('account-email');
+  const msg = document.getElementById('auth-message');
+  if(gate) gate.hidden = true;
+  if(shell) shell.hidden = false;
+  if(email) email.textContent = user?.email || '';
+  if(msg) msg.textContent = '';
+}
+
+async function loginWithGoogle(){
+  const btn = document.getElementById('google-login-btn');
+  const msg = document.getElementById('auth-message');
+  if(btn) btn.disabled = true;
+  if(msg) msg.textContent = '';
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    const result = await signInWithPopup(auth, googleProvider);
+    if(!isAllowedUser(result.user)){
+      const deniedEmail = result.user?.email || 'このアカウント';
+      await signOut(auth);
+      showLoginGate(`${deniedEmail} はこの在庫アプリの許可アカウントではありません。`);
+    }
+  } catch(error){
+    console.error('google login failed', error);
+    const code = String(error?.code || '');
+    if(code !== 'auth/popup-closed-by-user'){
+      if(msg) msg.textContent = `ログインできませんでした。${code || error?.message || ''}`;
+    }
+  } finally {
+    if(btn) btn.disabled = false;
+  }
+}
+
+async function logoutAndReload(){
+  try { await signOut(auth); }
+  finally { location.reload(); }
+}
+
+async function startAuthGate(){
+  document.getElementById('google-login-btn')?.addEventListener('click', loginWithGoogle);
+  document.getElementById('logout-btn')?.addEventListener('click', logoutAndReload);
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch(error){
+    console.warn('auth persistence setup failed', error);
+  }
+  onAuthStateChanged(auth, async user => {
+    if(!user){
+      showLoginGate();
+      return;
+    }
+    if(!isAllowedUser(user)){
+      const deniedEmail = user.email || 'このアカウント';
+      await signOut(auth);
+      showLoginGate(`${deniedEmail} はこの在庫アプリの許可アカウントではありません。`);
+      return;
+    }
+    showInventoryForUser(user);
+    if(!appInitialized){
+      appInitialized = true;
+      await init();
+    }
+  });
+}
+
+startAuthGate();
 </script>
 </body>
 </html>
