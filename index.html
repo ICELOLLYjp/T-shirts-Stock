@@ -427,7 +427,7 @@
 
   .main-nav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 6px;
     margin: 0 0 12px;
     position: sticky;
@@ -440,7 +440,7 @@
     min-width: 0;
     height: 42px;
     padding: 0 4px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     border-radius: 10px;
     border: 1px solid var(--border);
@@ -626,6 +626,145 @@
   .meta-row { align-items: flex-start; }
   .meta-dates { display: grid; gap: 3px; min-width: 0; }
 
+
+  .assign-summary {
+    margin: 0 0 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .assign-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .assign-stat {
+    text-align: center;
+    padding: 8px 4px;
+    border-radius: 9px;
+    background: var(--bg);
+  }
+  .assign-stat-label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .assign-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .assign-progress {
+    height: 8px;
+    margin-top: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--border);
+  }
+  .assign-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: inherit;
+  }
+  .assign-warning {
+    margin-top: 9px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--danger);
+  }
+  .assign-target {
+    position: sticky;
+    top: calc(env(safe-area-inset-top) + 54px);
+    z-index: 15;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .assign-list {
+    display: grid;
+    gap: 8px;
+  }
+  .assign-card {
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .assign-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .assign-design {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .assign-variant {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .assign-card-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 78px 76px;
+    gap: 8px;
+    align-items: center;
+  }
+  .assign-unassigned {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .assign-unassigned strong {
+    color: var(--text);
+    font-size: 18px;
+  }
+  .assign-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 6px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .assign-btn {
+    height: 38px;
+    padding: 0 8px;
+    border-radius: 9px;
+    border: 1px solid var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .assign-btn:disabled {
+    opacity: .45;
+  }
+  .assignment-done {
+    padding: 18px 12px;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .assignment-done strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 20px;
+  }
+
 </style>
 </head>
 <body>
@@ -642,6 +781,7 @@
 <div id="schema-status"></div>
 <nav class="main-nav" id="main-nav">
   <button type="button" data-view="finished" class="active">完成品</button>
+  <button type="button" data-view="assign">Body振分</button>
   <button type="button" data-view="blank">未プリント</button>
   <button type="button" data-view="sheets">シート</button>
   <button type="button" data-view="plan">制作予定</button>
@@ -683,6 +823,18 @@
     <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
     <button class="icon-btn" id="add-design-btn">＋</button>
   </div>
+</section>
+
+
+<section id="view-assign" class="view-panel" hidden>
+  <div class="section-title">Body振り分け</div>
+  <div class="section-note">現在「未設定」Bodyにある完成品在庫を、登録したBodyへ移します。tshirtStock/shared の在庫数は変更しません。</div>
+  <div id="assign-summary"></div>
+  <div class="assign-target">
+    <label class="field-label" for="assign-body-select">振り分け先Body</label>
+    <select id="assign-body-select" class="master-select"></select>
+  </div>
+  <div id="assign-app"></div>
 </section>
 
 <section id="view-blank" class="view-panel" hidden>
@@ -988,16 +1140,42 @@ function buildMasterMirrorPatch(){
     if(!sizes[id]) sizes[id] = item;
   });
 
+  const residualTree = (totalLegacyTree, existingTree) => {
+    const residual = {};
+    Object.entries(totalLegacyTree || {}).forEach(([designId, colorMap]) => {
+      Object.entries(colorMap || {}).forEach(([colorId, sizeMap]) => {
+        Object.entries(sizeMap || {}).forEach(([sizeId, totalCell]) => {
+          const totalQty = Math.max(0, Number(totalCell?.qty || 0));
+          let assignedQty = 0;
+          Object.entries(existingTree || {}).forEach(([bodyId, bodyTree]) => {
+            if(bodyId === LEGACY_BODY_ID) return;
+            assignedQty += Math.max(0, Number(bodyTree?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
+          });
+          const remaining = Math.max(0, totalQty - assignedQty);
+          if(remaining > 0){
+            if(!residual[designId]) residual[designId] = {};
+            if(!residual[designId][colorId]) residual[designId][colorId] = {};
+            residual[designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
+          }
+        });
+      });
+    });
+    return residual;
+  };
+
+  const existingInventory = masterDocument?.inventory_v2 || {};
+  const existingPlan = masterDocument?.production_plan_v2 || {};
+
   return {
     schemaVersion: SCHEMA_VERSION,
     masters: { bodies, designs, colors, sizes },
     inventory_v2: {
-      ...(masterDocument?.inventory_v2 || {}),
-      [LEGACY_BODY_ID]: built.inventory_v2[LEGACY_BODY_ID]
+      ...existingInventory,
+      [LEGACY_BODY_ID]: residualTree(built.inventory_v2[LEGACY_BODY_ID], existingInventory)
     },
     production_plan_v2: {
-      ...(masterDocument?.production_plan_v2 || {}),
-      [LEGACY_BODY_ID]: built.production_plan_v2[LEGACY_BODY_ID]
+      ...existingPlan,
+      [LEGACY_BODY_ID]: residualTree(built.production_plan_v2[LEGACY_BODY_ID], existingPlan)
     },
     blank_stock: masterDocument?.blank_stock || {},
     print_sheets: masterDocument?.print_sheets || {},
@@ -1115,7 +1293,8 @@ let state = {
   sortMode: 'priority',
   activeView: 'finished',
   activePlanDesign: DEFAULT_DESIGNS[0],
-  blankBodyId: LEGACY_BODY_ID
+  blankBodyId: LEGACY_BODY_ID,
+  assignBodyId: ''
 };
 
 function ensureStock(design){
@@ -1358,6 +1537,7 @@ function renderBodySettings(){
       masterDocument = { ...masterDocument, masters };
       await saveMasterData({ masters });
       renderBlankStock();
+      renderBodyAssignment();
     });
   });
 }
@@ -1394,6 +1574,175 @@ async function addBodyMaster(){
   await saveMasterData({ masters });
   renderBodySettings();
   renderBlankStock();
+  renderBodyAssignment();
+}
+
+
+function masterInventoryBodyTotal(bodyId){
+  const bodyTree = masterDocument?.inventory_v2?.[bodyId] || {};
+  let total = 0;
+  Object.values(bodyTree).forEach(colorTree => {
+    Object.values(colorTree || {}).forEach(sizeTree => {
+      Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+    });
+  });
+  return total;
+}
+
+function masterInventoryGrandTotal(){
+  return Object.keys(masterDocument?.inventory_v2 || {}).reduce((sum, bodyId) => sum + masterInventoryBodyTotal(bodyId), 0);
+}
+
+function assignedInventoryTotal(){
+  return Object.keys(masterDocument?.inventory_v2 || {})
+    .filter(bodyId => bodyId !== LEGACY_BODY_ID)
+    .reduce((sum, bodyId) => sum + masterInventoryBodyTotal(bodyId), 0);
+}
+
+function unassignedInventoryRows(){
+  const rows = [];
+  const legacy = masterDocument?.inventory_v2?.[LEGACY_BODY_ID] || {};
+  const designsById = masterDocument?.masters?.designs || {};
+  const colorsById = masterDocument?.masters?.colors || {};
+  const sizesById = masterDocument?.masters?.sizes || {};
+
+  Object.entries(legacy).forEach(([designId, colorTree]) => {
+    Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+      Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+        const qty = Math.max(0, Number(cell?.qty || 0));
+        if(qty <= 0) return;
+        rows.push({
+          designId,
+          colorId,
+          sizeId,
+          qty,
+          designName: designsById[designId]?.managementName || designId,
+          colorName: colorsById[colorId]?.managementName || colorId,
+          sizeName: sizesById[sizeId]?.managementName || sizeId,
+          starred: Boolean(designsById[designId]?.starred),
+          sizeOrder: Number(sizesById[sizeId]?.order || 999)
+        });
+      });
+    });
+  });
+
+  return rows.sort((a,b) => {
+    if(a.starred !== b.starred) return Number(b.starred) - Number(a.starred);
+    const d = a.designName.localeCompare(b.designName, 'ja');
+    if(d) return d;
+    const c = a.colorName.localeCompare(b.colorName, 'ja');
+    if(c) return c;
+    return a.sizeOrder - b.sizeOrder;
+  });
+}
+
+function renderAssignSummary(){
+  const box = document.getElementById('assign-summary');
+  if(!box) return;
+  if(!masterReady || !masterDocument){
+    box.innerHTML = '';
+    return;
+  }
+  const unassigned = masterInventoryBodyTotal(LEGACY_BODY_ID);
+  const assigned = assignedInventoryTotal();
+  const masterTotal = unassigned + assigned;
+  const sharedTotal = totalStockAll();
+  const progress = masterTotal > 0 ? Math.min(100, Math.max(0, assigned / masterTotal * 100)) : 100;
+  const mismatch = masterTotal !== sharedTotal;
+  box.innerHTML = `<div class="assign-summary">
+    <div class="assign-summary-grid">
+      <div class="assign-stat"><span class="assign-stat-label">未設定</span><span class="assign-stat-value">${unassigned}</span></div>
+      <div class="assign-stat"><span class="assign-stat-label">振分済</span><span class="assign-stat-value">${assigned}</span></div>
+      <div class="assign-stat"><span class="assign-stat-label">合計</span><span class="assign-stat-value">${masterTotal}</span></div>
+    </div>
+    <div class="assign-progress"><div class="assign-progress-bar" style="width:${progress.toFixed(1)}%"></div></div>
+    ${mismatch ? `<div class="assign-warning">共有在庫 ${sharedTotal} 枚とBody別合計 ${masterTotal} 枚が一致していません。振り分けを止めてJSONバックアップを保存してください。</div>` : ''}
+  </div>`;
+}
+
+function renderBodyAssignment(){
+  const select = document.getElementById('assign-body-select');
+  const box = document.getElementById('assign-app');
+  if(!select || !box) return;
+
+  if(!masterReady || !masterDocument){
+    select.innerHTML = '<option>接続待ち</option>';
+    box.innerHTML = '<div class="production-empty">マスターデータに接続すると振り分けできます。</div>';
+    renderAssignSummary();
+    return;
+  }
+
+  const targetBodies = masterBodies().filter(body => body.id !== LEGACY_BODY_ID);
+  if(!targetBodies.length){
+    select.innerHTML = '<option value="">Bodyを登録してください</option>';
+    box.innerHTML = '<div class="production-empty">先にBody設定からOrganic、Vintage、MIJなどのBodyを登録してください。</div>';
+    renderAssignSummary();
+    return;
+  }
+
+  if(!targetBodies.some(body => body.id === state.assignBodyId)) state.assignBodyId = targetBodies[0].id;
+  select.innerHTML = targetBodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.assignBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
+
+  const totalsMatch = masterInventoryGrandTotal() === totalStockAll();
+  renderAssignSummary();
+  if(!totalsMatch){
+    box.innerHTML = '<div class="assignment-done"><strong>振り分け停止</strong><span>共有在庫とBody別合計が一致していません。JSONバックアップを保存して確認してください。</span></div>';
+    return;
+  }
+
+  const rows = unassignedInventoryRows();
+  if(!rows.length){
+    box.innerHTML = '<div class="assignment-done"><strong>振り分け完了</strong><span>未設定Bodyの完成品在庫は0枚です。</span></div>';
+    return;
+  }
+
+  box.innerHTML = `<div class="assign-list">${rows.map(row => `
+    <div class="assign-card">
+      <div class="assign-card-head">
+        <div class="assign-design">${row.starred ? '★ ' : ''}${escapeHtml(row.designName)}</div>
+        <div class="assign-variant">${escapeHtml(row.colorName)} / ${escapeHtml(row.sizeName)}</div>
+      </div>
+      <div class="assign-card-body">
+        <div class="assign-unassigned">未設定 <strong>${row.qty}</strong> 枚</div>
+        <input class="assign-input" type="number" min="1" max="${row.qty}" inputmode="numeric" value="${row.qty}" data-assign-qty="${escapeHtml(row.designId)}|${escapeHtml(row.colorId)}|${escapeHtml(row.sizeId)}">
+        <button class="assign-btn" type="button" data-assign-move="${escapeHtml(row.designId)}|${escapeHtml(row.colorId)}|${escapeHtml(row.sizeId)}">移動</button>
+      </div>
+    </div>`).join('')}</div>`;
+
+  box.querySelectorAll('button[data-assign-move]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.getAttribute('data-assign-move');
+      const [designId, colorId, sizeId] = key.split('|');
+      const input = box.querySelector(`input[data-assign-qty="${CSS.escape(key)}"]`);
+      const currentQty = Math.max(0, Number(masterDocument?.inventory_v2?.[LEGACY_BODY_ID]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
+      const moveQty = Math.max(0, Math.min(currentQty, parseInt(input?.value, 10) || 0));
+      const targetBodyId = state.assignBodyId;
+      if(!targetBodyId || targetBodyId === LEGACY_BODY_ID || moveQty <= 0 || currentQty <= 0) return;
+
+      btn.disabled = true;
+      const inventory = structuredClone(masterDocument.inventory_v2 || {});
+      if(!inventory[LEGACY_BODY_ID]) inventory[LEGACY_BODY_ID] = {};
+      if(!inventory[targetBodyId]) inventory[targetBodyId] = {};
+
+      if(!inventory[targetBodyId][designId]) inventory[targetBodyId][designId] = {};
+      if(!inventory[targetBodyId][designId][colorId]) inventory[targetBodyId][designId][colorId] = {};
+      const targetBefore = Math.max(0, Number(inventory[targetBodyId]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
+      inventory[targetBodyId][designId][colorId][sizeId] = { qty: targetBefore + moveQty, updatedAt: nowIso() };
+
+      const remaining = currentQty - moveQty;
+      if(remaining > 0){
+        inventory[LEGACY_BODY_ID][designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
+      } else {
+        delete inventory[LEGACY_BODY_ID][designId][colorId][sizeId];
+        if(!Object.keys(inventory[LEGACY_BODY_ID][designId][colorId]).length) delete inventory[LEGACY_BODY_ID][designId][colorId];
+        if(!Object.keys(inventory[LEGACY_BODY_ID][designId]).length) delete inventory[LEGACY_BODY_ID][designId];
+      }
+
+      masterDocument = { ...masterDocument, inventory_v2: inventory };
+      await saveMasterData({ inventory_v2: inventory });
+      renderBodyAssignment();
+    });
+  });
 }
 
 function blankTotalForBody(bodyId){
@@ -1587,7 +1936,7 @@ function renderPlanEditor(){
 }
 
 function setActiveView(view){
-  const allowed = ['finished','blank','sheets','plan'];
+  const allowed = ['finished','assign','blank','sheets','plan'];
   state.activeView = allowed.includes(view) ? view : 'finished';
   document.querySelectorAll('#main-nav button[data-view]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-view') === state.activeView));
   allowed.forEach(name => {
@@ -1603,6 +1952,8 @@ function renderCurrentView(){
   if(state.activeView === 'finished'){
     renderTabs();
     render();
+  } else if(state.activeView === 'assign'){
+    renderBodyAssignment();
   } else if(state.activeView === 'blank'){
     renderBlankStock();
   } else if(state.activeView === 'sheets'){
@@ -1666,7 +2017,8 @@ function saveLocal(){
       sortMode: state.sortMode,
       activeView: state.activeView,
       activePlanDesign: state.activePlanDesign,
-      blankBodyId: state.blankBodyId
+      blankBodyId: state.blankBodyId,
+      assignBodyId: state.assignBodyId
     }));
   } catch(e){
     console.error('local save failed', e);
@@ -1919,6 +2271,13 @@ document.getElementById('new-body-management').addEventListener('keydown', e => 
   if(e.key === 'Enter') addBodyMaster();
 });
 
+
+document.getElementById('assign-body-select').addEventListener('change', e => {
+  state.assignBodyId = e.target.value;
+  saveLocal();
+  renderBodyAssignment();
+});
+
 document.getElementById('blank-body-select').addEventListener('change', e => {
   state.blankBodyId = e.target.value;
   saveLocal();
@@ -1940,6 +2299,7 @@ async function init(){
       if(ui.activeView) state.activeView = ui.activeView;
       if(ui.activePlanDesign) state.activePlanDesign = ui.activePlanDesign;
       if(ui.blankBodyId) state.blankBodyId = ui.blankBodyId;
+      if(ui.assignBodyId) state.assignBodyId = ui.assignBodyId;
     }
   } catch(e) {
     console.log('no existing local data, using defaults');
@@ -1949,6 +2309,7 @@ async function init(){
   if(!state.activeView) state.activeView = 'finished';
   if(!state.activePlanDesign) state.activePlanDesign = state.activeDesign || Object.keys(state.designs)[0];
   if(!state.blankBodyId) state.blankBodyId = LEGACY_BODY_ID;
+  if(state.assignBodyId == null) state.assignBodyId = '';
   Object.values(state.designs).forEach(d => {
     if(d.starred == null) d.starred = Number(d.priority) === 1;
     if(!d.planned) d.planned = {};
