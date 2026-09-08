@@ -765,6 +765,50 @@
     font-size: 20px;
   }
 
+  .finished-master-bar {
+    margin: 0 0 12px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .finished-master-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+  }
+  .finished-master-grid .master-select { height: 42px; }
+  .finished-body-total {
+    min-width: 84px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .finished-body-total strong {
+    display: block;
+    color: var(--text);
+    font-size: 22px;
+    line-height: 1.15;
+  }
+  .master-badge {
+    display: inline-block;
+    margin-bottom: 7px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .master-sync-note {
+    margin-top: 7px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  body.master-authority .legacy-editor-row { display: none; }
+
 </style>
 </head>
 <body>
@@ -802,6 +846,17 @@
 </div>
 
 <section id="view-finished" class="view-panel">
+  <div id="finished-master-bar" class="finished-master-bar">
+    <div class="master-badge">実在庫マスター</div>
+    <div class="finished-master-grid">
+      <div>
+        <label class="field-label" for="finished-body-select">Body</label>
+        <select id="finished-body-select" class="master-select"></select>
+      </div>
+      <div id="finished-body-total" class="finished-body-total"></div>
+    </div>
+    <div class="master-sync-note">ここで変更した在庫を tshirtStock/master に保存し、Body合計を tshirtStock/shared へ自動同期します。</div>
+  </div>
   <div class="sort-row">
     <span class="sort-label">並び替え</span>
     <select id="sort-mode">
@@ -815,11 +870,11 @@
   <div class="export-row"><button class="export-btn" id="export-inventory-btn" type="button">在庫CSVを書き出す</button></div>
   <div class="tabs" id="design-tabs"></div>
   <div id="app"></div>
-  <div class="add-row">
+  <div class="add-row legacy-editor-row">
     <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
     <button class="icon-btn" id="add-color-btn">＋</button>
   </div>
-  <div class="section-divider add-row">
+  <div class="section-divider add-row legacy-editor-row">
     <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
     <button class="icon-btn" id="add-design-btn">＋</button>
   </div>
@@ -857,7 +912,7 @@
 
 <section id="view-plan" class="view-panel" hidden>
   <div class="section-title">制作予定</div>
-  <div class="plan-body-note">現在の既存データは Body「未設定」として保持しています。Body別への振り分けは次の移行工程で行います。</div>
+  <div class="plan-body-note">制作予定は現在 Design、Color、Size で管理しています。制作予定のBody指定は次の工程で追加します。</div>
   <div id="production-summary"></div>
   <div class="tabs" id="plan-design-tabs"></div>
   <div id="plan-app"></div>
@@ -931,12 +986,12 @@ function formatTimestamp(value){
 
 function renderLastUpdated(value){
   const el = document.getElementById('last-updated');
-  if(el) el.textContent = `実在庫更新：${formatTimestamp(value)}`;
+  if(el) el.textContent = `Pinkoi同期更新：${formatTimestamp(value)}`;
 }
 
 function renderMasterUpdated(value){
   const el = document.getElementById('master-updated');
-  if(el) el.textContent = `管理データ更新：${formatTimestamp(value)}`;
+  if(el) el.textContent = `実在庫更新：${formatTimestamp(value)}`;
 }
 
 function normalizedForJson(value){
@@ -1205,7 +1260,7 @@ function renderSchemaStatus(docData = masterDocument, status = ''){
   if(!box) return;
 
   if(status === 'loading'){
-    box.innerHTML = `<div class="schema-card"><strong>マスターデータを確認中</strong><div class="schema-note">既存在庫は tshirtStock/shared のまま保護されています。</div></div>`;
+    box.innerHTML = `<div class="schema-card"><strong>マスターデータを確認中</strong><div class="schema-note">tshirtStock/master の実在庫データを確認しています。</div></div>`;
     return;
   }
 
@@ -1213,8 +1268,8 @@ function renderSchemaStatus(docData = masterDocument, status = ''){
     const code = masterError.code || 'unknown';
     const detail = firestoreErrorText(masterError).replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const hint = code === 'permission-denied'
-      ? 'Firestoreルールで tshirtStock/master の読み書きを許可してください。既存の在庫同期は shared で継続します。'
-      : '既存の在庫同期は shared で継続します。エラー内容を確認してから master を再接続します。';
+      ? 'Firestoreルールで tshirtStock/master の読み書きを許可してください。'
+      : 'マスターデータへの接続エラーです。';
     box.innerHTML = `<div class="schema-card">
       <strong>マスター未接続</strong>
       <div class="schema-note">${hint}</div>
@@ -1225,15 +1280,18 @@ function renderSchemaStatus(docData = masterDocument, status = ''){
 
   const version = Number(docData?.schemaVersion || 0);
   if(version < SCHEMA_VERSION){
-    box.innerHTML = `<div class="schema-card"><strong>データ構造 v1</strong><div class="schema-note">既存在庫は保護されています。新しい master ドキュメントはまだ作成されていません。</div></div>`;
+    box.innerHTML = `<div class="schema-card"><strong>データ構造 v1</strong><div class="schema-note">新しい master ドキュメントはまだ準備中です。</div></div>`;
     return;
   }
 
   const c = schemaCounts(docData);
+  const authoritative = docData?.inventoryAuthority === 'master';
   box.innerHTML = `<div class="schema-card">
-    <strong>データ構造 v2 準備済み</strong>
+    <strong>${authoritative ? '実在庫マスター運用中' : 'データ構造 v2 準備済み'}</strong>
     <div>Body ${c.bodies} / Design ${c.designs} / Color ${c.colors} / Size ${c.sizes}</div>
-    <div class="schema-note">既存在庫は tshirtStock/shared、マスターデータは tshirtStock/master に分離しています。既存在庫は v2 の「未設定」Body にコピー済みです。</div>
+    <div class="schema-note">${authoritative
+      ? 'tshirtStock/master を実在庫の正本として使用し、Bodyを合算した数量を tshirtStock/shared へ自動同期しています。'
+      : 'Body振り分け完了後、tshirtStock/master を実在庫の正本へ切り替えます。'}</div>
   </div>`;
 }
 
@@ -1267,6 +1325,7 @@ async function ensureMasterDocument(){
     }
     masterReady = true;
     await reconcileBodyAssignmentFromShared(true);
+    await maybeActivateMasterAuthority();
     renderSchemaStatus(masterDocument);
     renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt || masterDocument?.migration?.migratedAt);
     renderCurrentView();
@@ -1295,7 +1354,8 @@ let state = {
   activeView: 'finished',
   activePlanDesign: DEFAULT_DESIGNS[0],
   blankBodyId: LEGACY_BODY_ID,
-  assignBodyId: ''
+  assignBodyId: '',
+  finishedBodyId: ''
 };
 
 function ensureStock(design){
@@ -1312,14 +1372,17 @@ function ensureStock(design){
 }
 
 function totalForColor(design, color){
+  if(inventoryAuthorityActive()) return masterTotalForColorName(design, color);
   const d = state.designs[design];
   return SIZES.reduce((sum,s) => sum + (d.stock[color]?.[s] || 0), 0);
 }
 function totalForDesign(design){
+  if(inventoryAuthorityActive()) return masterTotalForDesignName(design);
   const d = state.designs[design];
   return d.colors.reduce((sum,c) => sum + totalForColor(design,c), 0);
 }
 function totalStockAll(){
+  if(inventoryAuthorityActive()) return masterFinishedGrandTotal();
   return Object.keys(state.designs).reduce((sum, design) => {
     ensureStock(design);
     return sum + totalForDesign(design);
@@ -1328,12 +1391,14 @@ function totalStockAll(){
 function renderStockSummary(){
   const box = document.getElementById('stock-summary');
   if(!box) return;
+  const total = totalStockAll();
   box.innerHTML = `
     <div class="stock-summary">
-      <span class="stock-summary-label">Tシャツ在庫 合計</span>
-      <span class="stock-summary-value">${totalStockAll()}<span class="stock-summary-unit"> 枚</span></span>
+      <span class="stock-summary-label">Tシャツ実在庫 合計</span>
+      <span class="stock-summary-value">${total}<span class="stock-summary-unit"> 枚</span></span>
     </div>`;
 }
+
 function totalPlannedForColor(design, color){
   const d = state.designs[design];
   return SIZES.reduce((sum,s) => sum + (d.planned?.[color]?.[s] || 0), 0);
@@ -1488,6 +1553,267 @@ function masterDesigns(){
       if(sa !== sb) return sb - sa;
       return String(a.managementName || '').localeCompare(String(b.managementName || ''), 'ja');
     });
+}
+
+
+function inventoryAuthorityActive(){
+  return Boolean(masterReady && masterDocument?.inventoryAuthority === 'master');
+}
+
+function assignableBodies(){
+  return masterBodies().filter(body => body.id !== LEGACY_BODY_ID);
+}
+
+function masterDesignByName(name){
+  const key = String(name ?? '').trim().toLowerCase();
+  return Object.values(masterDocument?.masters?.designs || {}).find(item =>
+    String(item?.legacyKey || '').trim().toLowerCase() === key ||
+    String(item?.managementName || '').trim().toLowerCase() === key
+  );
+}
+
+function masterColorByName(name){
+  const key = String(name ?? '').trim().toLowerCase();
+  return Object.values(masterDocument?.masters?.colors || {}).find(item =>
+    String(item?.legacyKey || '').trim().toLowerCase() === key ||
+    String(item?.managementName || '').trim().toLowerCase() === key
+  );
+}
+
+function masterSizeByName(name){
+  const key = String(name ?? '').trim().toLowerCase();
+  return Object.values(masterDocument?.masters?.sizes || {}).find(item =>
+    String(item?.managementName || '').trim().toLowerCase() === key ||
+    String(item?.salesName || '').trim().toLowerCase() === key
+  );
+}
+
+function masterInventoryQty(bodyId, designId, colorId, sizeId){
+  return Math.max(0, Number(masterDocument?.inventory_v2?.[bodyId]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
+}
+
+function masterFinishedGrandTotal(){
+  if(!masterDocument) return 0;
+  const bodyIds = Object.keys(masterDocument.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
+  return bodyIds.reduce((sum, id) => sum + masterInventoryBodyTotal(id), 0);
+}
+
+function masterTotalForDesignName(designName, bodyId = null){
+  const design = masterDesignByName(designName);
+  if(!design) return 0;
+  const bodies = bodyId ? [bodyId] : Object.keys(masterDocument?.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
+  let total = 0;
+  bodies.forEach(id => {
+    const tree = masterDocument?.inventory_v2?.[id]?.[design.id] || {};
+    Object.values(tree).forEach(sizeTree => Object.values(sizeTree || {}).forEach(cell => {
+      total += Math.max(0, Number(cell?.qty || 0));
+    }));
+  });
+  return total;
+}
+
+function masterTotalForColorName(designName, colorName, bodyId = null){
+  const design = masterDesignByName(designName);
+  const color = masterColorByName(colorName);
+  if(!design || !color) return 0;
+  const bodies = bodyId ? [bodyId] : Object.keys(masterDocument?.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
+  let total = 0;
+  bodies.forEach(id => {
+    const sizeTree = masterDocument?.inventory_v2?.[id]?.[design.id]?.[color.id] || {};
+    Object.values(sizeTree).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  });
+  return total;
+}
+
+function buildSharedDesignsFromMaster(){
+  const existing = structuredClone(state.designs || {});
+  const designs = masterDocument?.masters?.designs || {};
+  const colors = masterDocument?.masters?.colors || {};
+  const sizes = masterDocument?.masters?.sizes || {};
+  const next = {};
+
+  Object.values(designs).forEach(dm => {
+    const name = dm.legacyKey || dm.managementName;
+    if(!name) return;
+    const old = existing[name] || { colors: [], planned: {}, starred: false };
+    const colorNames = Array.from(new Set([...(old.colors || [])]));
+    next[name] = {
+      ...old,
+      colors: colorNames,
+      stock: {},
+      planned: old.planned || {},
+      starred: Boolean(dm.starred ?? old.starred)
+    };
+  });
+
+  const bodyIds = Object.keys(masterDocument?.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
+  bodyIds.forEach(bodyId => {
+    const bodyTree = masterDocument.inventory_v2?.[bodyId] || {};
+    Object.entries(bodyTree).forEach(([designId, colorTree]) => {
+      const dm = designs[designId];
+      const designName = dm?.legacyKey || dm?.managementName;
+      if(!designName) return;
+      if(!next[designName]) next[designName] = { colors: [], stock: {}, planned: {}, starred: Boolean(dm?.starred) };
+      Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+        const cm = colors[colorId];
+        const colorName = cm?.legacyKey || cm?.managementName;
+        if(!colorName) return;
+        if(!next[designName].colors.includes(colorName)) next[designName].colors.push(colorName);
+        if(!next[designName].stock[colorName]) next[designName].stock[colorName] = {};
+        Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+          const sm = sizes[sizeId];
+          const sizeName = sm?.managementName || sm?.salesName;
+          if(!sizeName) return;
+          const qty = Math.max(0, Number(cell?.qty || 0));
+          next[designName].stock[colorName][sizeName] = Math.max(0, Number(next[designName].stock[colorName][sizeName] || 0)) + qty;
+        });
+      });
+    });
+  });
+
+  Object.values(next).forEach(d => {
+    if(!d.planned) d.planned = {};
+    (d.colors || []).forEach(colorName => {
+      if(!d.stock[colorName]) d.stock[colorName] = {};
+      if(!d.planned[colorName]) d.planned[colorName] = {};
+      SIZES.forEach(sizeName => {
+        if(d.stock[colorName][sizeName] == null) d.stock[colorName][sizeName] = 0;
+        if(d.planned[colorName][sizeName] == null) d.planned[colorName][sizeName] = 0;
+      });
+    });
+  });
+  return next;
+}
+
+function stockFingerprint(designs){
+  const rows = [];
+  Object.keys(designs || {}).sort().forEach(designName => {
+    const d = designs[designName] || {};
+    (d.colors || []).slice().sort().forEach(colorName => {
+      SIZES.forEach(sizeName => {
+        const qty = Math.max(0, Number(d.stock?.[colorName]?.[sizeName] || 0));
+        if(qty > 0) rows.push(`${designName}\u241f${colorName}\u241f${sizeName}\u241f${qty}`);
+      });
+    });
+  });
+  return rows.join('\u241e');
+}
+
+
+function buildLegacyProductionPlanFromState(){
+  const plan = {};
+  Object.entries(state.designs || {}).forEach(([designName, d]) => {
+    const dm = masterDesignByName(designName);
+    if(!dm) return;
+    (d.colors || []).forEach(colorName => {
+      const cm = masterColorByName(colorName);
+      if(!cm) return;
+      SIZES.forEach(sizeName => {
+        const qty = Math.max(0, Number(d.planned?.[colorName]?.[sizeName] || 0));
+        if(qty <= 0) return;
+        const sm = masterSizeByName(sizeName);
+        if(!sm) return;
+        if(!plan[dm.id]) plan[dm.id] = {};
+        if(!plan[dm.id][cm.id]) plan[dm.id][cm.id] = {};
+        plan[dm.id][cm.id][sm.id] = { qty, updatedAt: nowIso() };
+      });
+    });
+  });
+  return plan;
+}
+
+async function syncProductionPlanToMaster(){
+  if(!inventoryAuthorityActive()) return false;
+  const all = { ...(masterDocument?.production_plan_v2 || {}) };
+  all[LEGACY_BODY_ID] = buildLegacyProductionPlanFromState();
+  masterDocument = { ...masterDocument, production_plan_v2: all };
+  return await saveMasterData({ production_plan_v2: all });
+}
+
+async function syncSharedFromMaster(){
+  if(!inventoryAuthorityActive() || !cloudReady) return false;
+  const next = buildSharedDesignsFromMaster();
+  const currentFingerprint = stockFingerprint(sharedDocument?.designs || state.designs || {});
+  const nextFingerprint = stockFingerprint(next);
+  state.designs = next;
+  saveLocal();
+  if(currentFingerprint === nextFingerprint){
+    renderCurrentView();
+    return true;
+  }
+  try {
+    setSyncStatus('Pinkoi在庫へ同期中…');
+    await updateDoc(sharedRef, {
+      designs: next,
+      updatedAt: serverTimestamp(),
+      inventorySource: 'tshirtStock/master'
+    });
+    sharedDocument = { ...(sharedDocument || {}), designs: next, inventorySource: 'tshirtStock/master' };
+    setSyncStatus('共有済み', 'ok');
+    renderCurrentView();
+    return true;
+  } catch(error){
+    console.error('master to shared sync failed', error);
+    setSyncStatus(`Pinkoi同期エラー：${error.code || 'unknown'}`, 'error');
+    return false;
+  }
+}
+
+async function maybeActivateMasterAuthority(){
+  if(!masterReady || !masterDocument) return false;
+  if(masterDocument.inventoryAuthority === 'master'){
+    document.body.classList.add('master-authority');
+    await syncSharedFromMaster();
+    return true;
+  }
+  const canonical = buildCanonicalInventoryFromShared();
+  const sharedTotal = totalStockAll();
+  const complete = canonical.ok && canonical.unassignedTotal === 0 && canonical.assignedTotal === sharedTotal && sharedTotal >= 0;
+  if(!complete) return false;
+
+  const nextInventory = canonical.inventory;
+  masterDocument = {
+    ...masterDocument,
+    inventory_v2: nextInventory,
+    inventoryAuthority: 'master',
+    authorityActivatedAt: nowIso()
+  };
+  const saved = await saveMasterData({
+    inventory_v2: nextInventory,
+    inventoryAuthority: 'master',
+    authorityActivatedAt: nowIso()
+  });
+  if(saved === false) return false;
+  document.body.classList.add('master-authority');
+  await syncSharedFromMaster();
+  return true;
+}
+
+async function saveMasterInventoryAndSync(inventory){
+  if(!inventoryAuthorityActive()) return false;
+  masterDocument = { ...masterDocument, inventory_v2: inventory };
+  const saved = await saveMasterData({ inventory_v2: inventory });
+  if(saved === false) return false;
+  await syncSharedFromMaster();
+  return true;
+}
+
+function renderFinishedBodySelector(){
+  const select = document.getElementById('finished-body-select');
+  const totalBox = document.getElementById('finished-body-total');
+  const bar = document.getElementById('finished-master-bar');
+  if(!select || !totalBox || !bar) return;
+
+  if(!inventoryAuthorityActive()){
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = '';
+  const bodies = assignableBodies();
+  if(!bodies.some(b => b.id === state.finishedBodyId)) state.finishedBodyId = bodies[0]?.id || '';
+  select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.finishedBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
+  const bodyTotal = state.finishedBodyId ? masterInventoryBodyTotal(state.finishedBodyId) : 0;
+  totalBox.innerHTML = `<span>選択Body</span><strong>${bodyTotal}</strong><span>枚</span>`;
 }
 
 async function saveMasterData(fields){
@@ -2141,7 +2467,11 @@ function setActiveView(view){
 
 function renderCurrentView(){
   renderBodySettings();
+  if(inventoryAuthorityActive()) document.body.classList.add('master-authority');
+  else document.body.classList.remove('master-authority');
+
   if(state.activeView === 'finished'){
+    renderFinishedBodySelector();
     renderTabs();
     render();
   } else if(state.activeView === 'assign'){
@@ -2157,28 +2487,44 @@ function renderCurrentView(){
   }
 }
 
-
 function exportInventoryCsv(){
-  const rows = [['デザイン','色','サイズ','在庫数','制作予定','優先']];
-  Object.keys(state.designs).forEach(design => {
-    ensureStock(design);
-    const d = state.designs[design];
-    d.colors.forEach(color => {
-      SIZES.forEach(size => {
-        const stock = Number(d.stock?.[color]?.[size] || 0);
-        const planned = Number(d.planned?.[color]?.[size] || 0);
-        if(stock > 0 || planned > 0){
-          rows.push([design, color, size, stock, planned, d.starred ? '★' : '']);
-        }
+  const rows = [['Body','デザイン','色','サイズ','在庫数','優先']];
+  if(inventoryAuthorityActive()){
+    const bodies = masterDocument?.masters?.bodies || {};
+    const designs = masterDocument?.masters?.designs || {};
+    const colors = masterDocument?.masters?.colors || {};
+    const sizes = masterDocument?.masters?.sizes || {};
+    Object.entries(masterDocument?.inventory_v2 || {}).forEach(([bodyId, designTree]) => {
+      if(bodyId === LEGACY_BODY_ID) return;
+      const bodyName = bodies[bodyId]?.managementName || bodyId;
+      Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+        const designName = designs[designId]?.managementName || designs[designId]?.legacyKey || designId;
+        Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+          const colorName = colors[colorId]?.managementName || colors[colorId]?.legacyKey || colorId;
+          Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+            const qty = Math.max(0, Number(cell?.qty || 0));
+            if(qty <= 0) return;
+            const sizeName = sizes[sizeId]?.managementName || sizeId;
+            rows.push([bodyName, designName, colorName, sizeName, qty, designs[designId]?.starred ? '★' : '']);
+          });
+        });
       });
     });
-  });
+  } else {
+    Object.keys(state.designs).forEach(design => {
+      ensureStock(design);
+      const d = state.designs[design];
+      d.colors.forEach(color => SIZES.forEach(size => {
+        const stock = Number(d.stock?.[color]?.[size] || 0);
+        if(stock > 0) rows.push(['未設定', design, color, size, stock, d.starred ? '★' : '']);
+      }));
+    });
+  }
 
   const csv = rows.map(row => row.map(value => {
     const text = String(value ?? '');
     return '"' + text.replace(/"/g, '""') + '"';
   }).join(',')).join('\r\n');
-
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
@@ -2210,7 +2556,8 @@ function saveLocal(){
       activeView: state.activeView,
       activePlanDesign: state.activePlanDesign,
       blankBodyId: state.blankBodyId,
-      assignBodyId: state.assignBodyId
+      assignBodyId: state.assignBodyId,
+      finishedBodyId: state.finishedBodyId
     }));
   } catch(e){
     console.error('local save failed', e);
@@ -2219,6 +2566,15 @@ function saveLocal(){
 
 async function saveCloudNow(){
   if(!cloudReady) return;
+
+  if(inventoryAuthorityActive()){
+    // master 運用後は shared の stock を直接編集しない。
+    // 制作予定は master に保存し、stock は master から shared へ再生成する。
+    await syncProductionPlanToMaster();
+    await syncSharedFromMaster();
+    return;
+  }
+
   setSyncStatus('同期中…');
   try {
     await updateDoc(sharedRef, {
@@ -2298,6 +2654,7 @@ function renderTabs(){
 
 function render(){
   renderStockSummary();
+  renderFinishedBodySelector();
   const design = state.activeDesign;
   if(!state.designs[design]) return;
   ensureStock(design);
@@ -2305,64 +2662,112 @@ function render(){
   const app = document.getElementById('app');
   let html = '';
 
+  const selectedBodyId = inventoryAuthorityActive() ? state.finishedBodyId : null;
+  const selectedBodyTotal = inventoryAuthorityActive() ? masterTotalForDesignName(design, selectedBodyId) : totalForDesign(design);
+  const allBodiesTotal = inventoryAuthorityActive() ? masterTotalForDesignName(design) : totalForDesign(design);
+
   html += `<div class="total-row">
-    <span class="total-label">${design} 合計在庫</span>
-    <span class="total-value">${totalForDesign(design)}<span class="total-unit"> 枚</span></span>
+    <span class="total-label">${escapeHtml(design)} ${inventoryAuthorityActive() ? '選択Body在庫' : '合計在庫'}</span>
+    <span class="total-value">${selectedBodyTotal}<span class="total-unit"> 枚</span></span>
   </div>`;
+  if(inventoryAuthorityActive()){
+    html += `<div class="total-row" style="margin-top:-8px;">
+      <span class="total-label">${escapeHtml(design)} 全Body合計</span>
+      <span class="total-value" style="font-size:20px;">${allBodiesTotal}<span class="total-unit"> 枚</span></span>
+    </div>`;
+  }
+
   html += `<div class="design-settings">
-    <div>
-      <span class="priority-label">制作優先</span>
-    </div>
+    <div><span class="priority-label">制作優先</span></div>
     <button class="star-btn ${d.starred ? 'active' : ''}" id="star-priority-btn" type="button">${d.starred ? '★ 優先' : '☆ 優先'}</button>
   </div>`;
 
   if(d.colors.length > 0){
     html += '<div class="size-header">' + SIZES.map(s => `<div>${s}</div>`).join('') + '</div>';
   } else {
-    html += '<p class="empty-note">まだ色が登録されていません。下から追加してください。</p>';
+    html += '<p class="empty-note">色が登録されていません。</p>';
   }
 
   d.colors.forEach(color => {
     html += `<div class="color-card">
       <div class="color-row">
-        <div class="color-name">${color}</div>
+        <div class="color-name">${escapeHtml(color)}</div>
         ${SIZES.map(size => {
-          const qty = d.stock[color][size];
+          let qty = d.stock[color]?.[size] || 0;
+          if(inventoryAuthorityActive()){
+            const dm = masterDesignByName(design);
+            const cm = masterColorByName(color);
+            const sm = masterSizeByName(size);
+            qty = dm && cm && sm && selectedBodyId ? masterInventoryQty(selectedBodyId, dm.id, cm.id, sm.id) : 0;
+          }
           return `<div class="size-cell">
-            <button class="qty-btn" data-color="${color}" data-size="${size}" data-delta="-1">−</button>
+            <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="-1">−</button>
             <span class="qty-val">${qty}</span>
-            <button class="qty-btn" data-color="${color}" data-size="${size}" data-delta="1">＋</button>
+            <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="1">＋</button>
           </div>`;
         }).join('')}
       </div>
       <div class="card-footer">
-        <span class="subtotal">在庫 ${totalForColor(design,color)} 枚</span>
-        <button class="remove-btn" data-remove-color="${color}">削除</button>
+        <span class="subtotal">${inventoryAuthorityActive() ? `選択Body ${masterTotalForColorName(design,color,selectedBodyId)} 枚 / 全Body ${masterTotalForColorName(design,color)} 枚` : `在庫 ${totalForColor(design,color)} 枚`}</span>
       </div>
     </div>`;
   });
-
-  if(Object.keys(state.designs).length > 1){
-    html += `<button class="delete-design-btn" data-remove-design="${design}">「${design}」を削除</button>`;
-  }
 
   app.innerHTML = html;
 
   const starPriorityBtn = document.getElementById('star-priority-btn');
   if(starPriorityBtn){
-    starPriorityBtn.addEventListener('click', () => {
+    starPriorityBtn.addEventListener('click', async () => {
       d.starred = !d.starred;
+      if(inventoryAuthorityActive()){
+        const dm = masterDesignByName(design);
+        if(dm){
+          const designsMap = { ...(masterDocument.masters?.designs || {}) };
+          designsMap[dm.id] = { ...designsMap[dm.id], starred: d.starred, updatedAt: nowIso() };
+          const masters = { ...(masterDocument.masters || {}), designs: designsMap };
+          masterDocument = { ...masterDocument, masters };
+          await saveMasterData({ masters });
+          await syncSharedFromMaster();
+        }
+      } else {
+        save();
+      }
       renderTabs();
       render();
-      save();
     });
   }
 
   app.querySelectorAll('button[data-color]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const color = btn.getAttribute('data-color');
       const size = btn.getAttribute('data-size');
       const delta = parseInt(btn.getAttribute('data-delta'));
+
+      if(inventoryAuthorityActive()){
+        const bodyId = state.finishedBodyId;
+        const dm = masterDesignByName(design);
+        const cm = masterColorByName(color);
+        const sm = masterSizeByName(size);
+        if(!bodyId || !dm || !cm || !sm) return;
+        btn.disabled = true;
+        const inventory = structuredClone(masterDocument.inventory_v2 || {});
+        if(!inventory[bodyId]) inventory[bodyId] = {};
+        if(!inventory[bodyId][dm.id]) inventory[bodyId][dm.id] = {};
+        if(!inventory[bodyId][dm.id][cm.id]) inventory[bodyId][dm.id][cm.id] = {};
+        const current = Math.max(0, Number(inventory[bodyId][dm.id][cm.id]?.[sm.id]?.qty || 0));
+        const next = Math.max(0, current + delta);
+        if(next > 0) inventory[bodyId][dm.id][cm.id][sm.id] = { qty: next, updatedAt: nowIso() };
+        else {
+          delete inventory[bodyId][dm.id][cm.id][sm.id];
+          if(!Object.keys(inventory[bodyId][dm.id][cm.id]).length) delete inventory[bodyId][dm.id][cm.id];
+          if(!Object.keys(inventory[bodyId][dm.id]).length) delete inventory[bodyId][dm.id];
+        }
+        await saveMasterInventoryAndSync(inventory);
+        renderTabs();
+        render();
+        return;
+      }
+
       const next = Math.max(0, (d.stock[color][size] || 0) + delta);
       d.stock[color][size] = next;
       renderTabs();
@@ -2370,30 +2775,6 @@ function render(){
       save();
     });
   });
-
-  app.querySelectorAll('button[data-remove-color]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const color = btn.getAttribute('data-remove-color');
-      d.colors = d.colors.filter(c => c !== color);
-      delete d.stock[color];
-      if(d.planned) delete d.planned[color];
-      render();
-      save();
-    });
-  });
-
-  const removeDesignBtn = app.querySelector('button[data-remove-design]');
-  if(removeDesignBtn){
-    removeDesignBtn.addEventListener('click', () => {
-      const name = removeDesignBtn.getAttribute('data-remove-design');
-      delete state.designs[name];
-      const remaining = Object.keys(state.designs);
-      state.activeDesign = remaining[0];
-      renderTabs();
-      render();
-      save();
-    });
-  }
 }
 
 document.getElementById('add-color-btn').addEventListener('click', () => {
@@ -2470,6 +2851,12 @@ document.getElementById('assign-body-select').addEventListener('change', e => {
   renderBodyAssignment();
 });
 
+document.getElementById('finished-body-select').addEventListener('change', e => {
+  state.finishedBodyId = e.target.value;
+  saveLocal();
+  render();
+});
+
 document.getElementById('blank-body-select').addEventListener('change', e => {
   state.blankBodyId = e.target.value;
   saveLocal();
@@ -2492,6 +2879,7 @@ async function init(){
       if(ui.activePlanDesign) state.activePlanDesign = ui.activePlanDesign;
       if(ui.blankBodyId) state.blankBodyId = ui.blankBodyId;
       if(ui.assignBodyId) state.assignBodyId = ui.assignBodyId;
+      if(ui.finishedBodyId) state.finishedBodyId = ui.finishedBodyId;
     }
   } catch(e) {
     console.log('no existing local data, using defaults');
@@ -2502,6 +2890,7 @@ async function init(){
   if(!state.activePlanDesign) state.activePlanDesign = state.activeDesign || Object.keys(state.designs)[0];
   if(!state.blankBodyId) state.blankBodyId = LEGACY_BODY_ID;
   if(state.assignBodyId == null) state.assignBodyId = '';
+  if(state.finishedBodyId == null) state.finishedBodyId = '';
   Object.values(state.designs).forEach(d => {
     if(d.starred == null) d.starred = Number(d.priority) === 1;
     if(!d.planned) d.planned = {};
@@ -2545,9 +2934,10 @@ async function init(){
     renderCurrentView();
 
     await ensureMasterDocument();
-    // shared を基準に未設定Bodyを毎回再生成する。
     if(masterReady){
-      await reconcileBodyAssignmentFromShared(true);
+      if(!inventoryAuthorityActive()) await reconcileBodyAssignmentFromShared(true);
+      await maybeActivateMasterAuthority();
+      if(inventoryAuthorityActive()) await syncSharedFromMaster();
       renderCurrentView();
     }
 
@@ -2555,11 +2945,26 @@ async function init(){
       if(!snapshot.exists()) return;
       sharedDocument = snapshot.data();
       if(sharedDocument?.designs){
-        state.designs = sharedDocument.designs;
-        Object.values(state.designs).forEach(d => {
-          if(d.starred == null) d.starred = false;
-          if(!d.planned) d.planned = {};
-        });
+        if(inventoryAuthorityActive()){
+          // shared からは planned など非在庫情報だけ取り込み、stock は master を維持する。
+          Object.entries(sharedDocument.designs).forEach(([name, incoming]) => {
+            if(!state.designs[name]) state.designs[name] = incoming;
+            else {
+              state.designs[name].planned = incoming.planned || state.designs[name].planned || {};
+              state.designs[name].colors = Array.from(new Set([...(state.designs[name].colors || []), ...(incoming.colors || [])]));
+            }
+          });
+          const expected = buildSharedDesignsFromMaster();
+          if(stockFingerprint(sharedDocument.designs) !== stockFingerprint(expected)){
+            setTimeout(() => syncSharedFromMaster(), 50);
+          }
+        } else {
+          state.designs = sharedDocument.designs;
+          Object.values(state.designs).forEach(d => {
+            if(d.starred == null) d.starred = false;
+            if(!d.planned) d.planned = {};
+          });
+        }
         if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
         saveLocal();
         renderCurrentView();
@@ -2579,6 +2984,7 @@ async function init(){
         masterReady = true;
         renderSchemaStatus(masterDocument);
         renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt);
+        if(inventoryAuthorityActive()) setTimeout(() => syncSharedFromMaster(), 20);
         renderCurrentView();
       }, (error) => {
         console.error('master snapshot error', error);
