@@ -424,6 +424,208 @@
     color: var(--text-muted);
   }
 
+
+  .main-nav {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin: 0 0 12px;
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: 20;
+    padding: 6px 0;
+    background: var(--bg);
+  }
+  .main-nav button {
+    min-width: 0;
+    height: 42px;
+    padding: 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-secondary);
+  }
+  .main-nav button.active {
+    border: 2px solid var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .view-panel[hidden] { display: none !important; }
+  .section-title {
+    margin: 6px 0 12px;
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .section-note {
+    margin: -4px 0 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .master-tools {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 12px;
+  }
+  .secondary-btn {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+  }
+  .body-settings-panel {
+    margin: 0 0 14px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  .body-settings-panel[hidden] { display: none; }
+  .body-master-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 0.9fr) minmax(120px, 1.3fr);
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .body-master-row input,
+  .body-add-grid input,
+  .master-select,
+  .stock-input,
+  .sheet-input {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 9px;
+    font-size: 14px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .body-add-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .body-add-grid button {
+    width: 42px;
+    height: 40px;
+  }
+  .field-label {
+    display: block;
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .master-select-row {
+    margin: 0 0 12px;
+  }
+  .inventory-grid {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .inventory-table {
+    width: 100%;
+    min-width: 420px;
+    border-collapse: separate;
+    border-spacing: 0 7px;
+    font-size: 12px;
+  }
+  .inventory-table th {
+    padding: 0 3px 3px;
+    text-align: center;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .inventory-table th:first-child { text-align: left; }
+  .inventory-table td {
+    padding: 7px 3px;
+    text-align: center;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .inventory-table td:first-child {
+    padding-left: 9px;
+    text-align: left;
+    border-left: 1px solid var(--border);
+    border-radius: 10px 0 0 10px;
+    font-weight: 600;
+  }
+  .inventory-table td:last-child {
+    padding-right: 9px;
+    border-right: 1px solid var(--border);
+    border-radius: 0 10px 10px 0;
+    font-weight: 700;
+  }
+  .stock-input {
+    height: 34px;
+    padding: 0 3px;
+    text-align: center;
+    font-weight: 600;
+  }
+  .mini-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .mini-summary strong {
+    color: var(--text);
+    font-size: 19px;
+  }
+  .sheet-list {
+    display: grid;
+    gap: 8px;
+  }
+  .sheet-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .sheet-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .sheet-input {
+    text-align: center;
+    font-weight: 700;
+  }
+  .plan-body-note {
+    margin: 0 0 12px;
+    padding: 9px 11px;
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .meta-row { align-items: flex-start; }
+  .meta-dates { display: grid; gap: 3px; min-width: 0; }
+
 </style>
 </head>
 <body>
@@ -431,34 +633,83 @@
 <h1>Tシャツ在庫管理</h1>
 <div id="sync-status" class="sync-status">Firebaseに接続しています…</div>
 <div class="meta-row">
-  <span id="last-updated" class="meta-updated">最終更新：確認中…</span>
+  <div class="meta-dates">
+    <span id="last-updated" class="meta-updated">実在庫更新：確認中…</span>
+    <span id="master-updated" class="meta-updated">管理データ更新：確認中…</span>
+  </div>
   <button id="backup-json-btn" class="backup-btn" type="button">JSONバックアップ</button>
 </div>
 <div id="schema-status"></div>
-<div class="sort-row">
-  <span class="sort-label">並び替え</span>
-  <select id="sort-mode">
-    <option value="priority">★ 優先順</option>
-    <option value="stock-asc">在庫 少ない順</option>
-    <option value="stock-desc">在庫 多い順</option>
-    <option value="name">名前順</option>
-  </select>
-</div>
-<div id="stock-summary"></div>
-<div class="export-row"><button class="export-btn" id="export-inventory-btn" type="button">在庫CSVを書き出す</button></div>
-<div id="production-summary"></div>
-<div class="tabs" id="design-tabs"></div>
-<div id="app"></div>
+<nav class="main-nav" id="main-nav">
+  <button type="button" data-view="finished" class="active">完成品</button>
+  <button type="button" data-view="blank">未プリント</button>
+  <button type="button" data-view="sheets">シート</button>
+  <button type="button" data-view="plan">制作予定</button>
+</nav>
 
-<div class="add-row">
-  <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
-  <button class="icon-btn" id="add-color-btn">＋</button>
+<div class="master-tools">
+  <button id="body-settings-toggle" class="secondary-btn" type="button">Body設定</button>
+</div>
+<div id="body-settings-panel" class="body-settings-panel" hidden>
+  <div class="section-title">Bodyマスター</div>
+  <div class="section-note">管理用名称は在庫管理用です。販売用名称はPinkoiなどの表示名として使えます。</div>
+  <div id="body-master-list"></div>
+  <div class="body-add-grid">
+    <input id="new-body-management" type="text" placeholder="管理名" />
+    <input id="new-body-sales" type="text" placeholder="販売用名称" />
+    <button id="add-body-btn" class="icon-btn" type="button">＋</button>
+  </div>
 </div>
 
-<div class="section-divider add-row">
-  <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
-  <button class="icon-btn" id="add-design-btn">＋</button>
-</div>
+<section id="view-finished" class="view-panel">
+  <div class="sort-row">
+    <span class="sort-label">並び替え</span>
+    <select id="sort-mode">
+      <option value="priority">★ 優先順</option>
+      <option value="stock-asc">在庫 少ない順</option>
+      <option value="stock-desc">在庫 多い順</option>
+      <option value="name">名前順</option>
+    </select>
+  </div>
+  <div id="stock-summary"></div>
+  <div class="export-row"><button class="export-btn" id="export-inventory-btn" type="button">在庫CSVを書き出す</button></div>
+  <div class="tabs" id="design-tabs"></div>
+  <div id="app"></div>
+  <div class="add-row">
+    <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
+    <button class="icon-btn" id="add-color-btn">＋</button>
+  </div>
+  <div class="section-divider add-row">
+    <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
+    <button class="icon-btn" id="add-design-btn">＋</button>
+  </div>
+</section>
+
+<section id="view-blank" class="view-panel" hidden>
+  <div class="section-title">未プリントボディ</div>
+  <div class="section-note">まだプリントしていないTシャツの在庫です。Body、Color、Sizeごとに管理します。</div>
+  <div class="master-select-row">
+    <label class="field-label" for="blank-body-select">Body</label>
+    <select id="blank-body-select" class="master-select"></select>
+  </div>
+  <div id="blank-summary"></div>
+  <div id="blank-app"></div>
+</section>
+
+<section id="view-sheets" class="view-panel" hidden>
+  <div class="section-title">プリントシート</div>
+  <div class="section-note">まだTシャツにプリントしていないシートをDesignごとに管理します。</div>
+  <div id="sheet-summary"></div>
+  <div id="sheet-app"></div>
+</section>
+
+<section id="view-plan" class="view-panel" hidden>
+  <div class="section-title">制作予定</div>
+  <div class="plan-body-note">現在の既存データは Body「未設定」として保持しています。Body別への振り分けは次の移行工程で行います。</div>
+  <div id="production-summary"></div>
+  <div class="tabs" id="plan-design-tabs"></div>
+  <div id="plan-app"></div>
+</section>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
@@ -528,7 +779,12 @@ function formatTimestamp(value){
 
 function renderLastUpdated(value){
   const el = document.getElementById('last-updated');
-  if(el) el.textContent = `最終更新：${formatTimestamp(value)}`;
+  if(el) el.textContent = `実在庫更新：${formatTimestamp(value)}`;
+}
+
+function renderMasterUpdated(value){
+  const el = document.getElementById('master-updated');
+  if(el) el.textContent = `管理データ更新：${formatTimestamp(value)}`;
 }
 
 function normalizedForJson(value){
@@ -833,6 +1089,8 @@ async function ensureMasterDocument(){
     }
     masterReady = true;
     renderSchemaStatus(masterDocument);
+    renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt || masterDocument?.migration?.migratedAt);
+    renderCurrentView();
     return true;
   } catch(error){
     masterReady = false;
@@ -854,7 +1112,10 @@ function buildDefaultDesigns(){
 let state = {
   designs: buildDefaultDesigns(),
   activeDesign: DEFAULT_DESIGNS[0],
-  sortMode: 'priority'
+  sortMode: 'priority',
+  activeView: 'finished',
+  activePlanDesign: DEFAULT_DESIGNS[0],
+  blankBodyId: LEGACY_BODY_ID
 };
 
 function ensureStock(design){
@@ -1011,6 +1272,349 @@ function renderProductionSummary(){
 }
 
 
+function escapeHtml(value){
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function masterBodies(){
+  const bodies = Object.values(masterDocument?.masters?.bodies || {});
+  return bodies.sort((a,b) => {
+    if(a.id === LEGACY_BODY_ID) return 1;
+    if(b.id === LEGACY_BODY_ID) return -1;
+    return String(a.managementName || '').localeCompare(String(b.managementName || ''), 'ja');
+  });
+}
+
+function masterColors(){
+  return Object.values(masterDocument?.masters?.colors || {})
+    .sort((a,b) => String(a.managementName || '').localeCompare(String(b.managementName || ''), 'ja'));
+}
+
+function masterSizes(){
+  return Object.values(masterDocument?.masters?.sizes || {})
+    .sort((a,b) => Number(a.order || 999) - Number(b.order || 999));
+}
+
+function masterDesigns(){
+  return Object.values(masterDocument?.masters?.designs || {})
+    .sort((a,b) => {
+      const sa = a.starred ? 1 : 0;
+      const sb = b.starred ? 1 : 0;
+      if(sa !== sb) return sb - sa;
+      return String(a.managementName || '').localeCompare(String(b.managementName || ''), 'ja');
+    });
+}
+
+async function saveMasterData(fields){
+  if(!masterReady || !masterDocument) return;
+  try {
+    await setDoc(masterRef, {
+      ...fields,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    masterDocument = { ...masterDocument, ...fields, updatedAt: nowIso() };
+    masterError = null;
+    renderMasterUpdated(masterDocument.updatedAt);
+    renderSchemaStatus(masterDocument);
+  } catch(error){
+    masterError = error;
+    console.error('master data save failed', error);
+    renderSchemaStatus();
+  }
+}
+
+function renderBodySettings(){
+  const box = document.getElementById('body-master-list');
+  if(!box) return;
+  if(!masterReady || !masterDocument){
+    box.innerHTML = '<div class="production-empty">マスターデータに接続すると編集できます。</div>';
+    return;
+  }
+  const bodies = masterBodies();
+  box.innerHTML = bodies.map(body => `
+    <div class="body-master-row">
+      <input type="text" data-body-management="${escapeHtml(body.id)}" value="${escapeHtml(body.managementName || '')}" ${body.id === LEGACY_BODY_ID ? 'readonly' : ''} aria-label="管理名">
+      <input type="text" data-body-sales="${escapeHtml(body.id)}" value="${escapeHtml(body.salesName || '')}" placeholder="販売用名称" aria-label="販売用名称">
+    </div>
+  `).join('');
+
+  box.querySelectorAll('input[data-body-management], input[data-body-sales]').forEach(input => {
+    input.addEventListener('change', async () => {
+      const id = input.getAttribute('data-body-management') || input.getAttribute('data-body-sales');
+      const bodiesMap = { ...(masterDocument.masters?.bodies || {}) };
+      if(!bodiesMap[id]) return;
+      if(input.hasAttribute('data-body-management') && id !== LEGACY_BODY_ID){
+        bodiesMap[id] = { ...bodiesMap[id], managementName: input.value.trim() || bodiesMap[id].managementName, updatedAt: nowIso() };
+      }
+      if(input.hasAttribute('data-body-sales')){
+        bodiesMap[id] = { ...bodiesMap[id], salesName: input.value.trim(), updatedAt: nowIso() };
+      }
+      const masters = { ...(masterDocument.masters || {}), bodies: bodiesMap };
+      masterDocument = { ...masterDocument, masters };
+      await saveMasterData({ masters });
+      renderBlankStock();
+    });
+  });
+}
+
+async function addBodyMaster(){
+  if(!masterReady || !masterDocument) return;
+  const management = document.getElementById('new-body-management');
+  const sales = document.getElementById('new-body-sales');
+  const name = management.value.trim();
+  if(!name) return;
+  const bodiesMap = { ...(masterDocument.masters?.bodies || {}) };
+  const existing = Object.values(bodiesMap).find(x => String(x.managementName || '').toLowerCase() === name.toLowerCase());
+  if(existing){
+    management.value = '';
+    sales.value = '';
+    return;
+  }
+  let id = stableId('body', name);
+  let suffix = 2;
+  while(bodiesMap[id]){
+    id = stableId('body', `${name}_${suffix++}`);
+  }
+  bodiesMap[id] = {
+    id,
+    managementName: name,
+    salesName: sales.value.trim(),
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  const masters = { ...(masterDocument.masters || {}), bodies: bodiesMap };
+  masterDocument = { ...masterDocument, masters };
+  management.value = '';
+  sales.value = '';
+  await saveMasterData({ masters });
+  renderBodySettings();
+  renderBlankStock();
+}
+
+function blankTotalForBody(bodyId){
+  const body = masterDocument?.blank_stock?.[bodyId] || {};
+  let total = 0;
+  Object.values(body).forEach(colorMap => {
+    Object.values(colorMap || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  });
+  return total;
+}
+
+function blankGrandTotal(){
+  const all = masterDocument?.blank_stock || {};
+  return Object.keys(all).reduce((sum, bodyId) => sum + blankTotalForBody(bodyId), 0);
+}
+
+function renderBlankSummary(){
+  const box = document.getElementById('blank-summary');
+  if(!box) return;
+  const selected = state.blankBodyId || LEGACY_BODY_ID;
+  box.innerHTML = `<div class="mini-summary"><span>選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>`;
+}
+
+function renderBlankStock(){
+  const select = document.getElementById('blank-body-select');
+  const box = document.getElementById('blank-app');
+  if(!select || !box) return;
+  if(!masterReady || !masterDocument){
+    select.innerHTML = '<option>接続待ち</option>';
+    box.innerHTML = '<div class="production-empty">マスターデータに接続すると入力できます。</div>';
+    renderBlankSummary();
+    return;
+  }
+  const bodies = masterBodies();
+  if(!bodies.some(b => b.id === state.blankBodyId)){
+    state.blankBodyId = bodies.find(b => b.id !== LEGACY_BODY_ID)?.id || bodies[0]?.id || LEGACY_BODY_ID;
+  }
+  select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.blankBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
+
+  const colors = masterColors();
+  const sizes = masterSizes();
+  const bodyStock = masterDocument.blank_stock?.[state.blankBodyId] || {};
+  box.innerHTML = `
+    <div class="inventory-grid">
+      <table class="inventory-table">
+        <thead><tr><th>Color</th>${sizes.map(s => `<th>${escapeHtml(s.managementName)}</th>`).join('')}<th>計</th></tr></thead>
+        <tbody>
+          ${colors.map(color => {
+            const total = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0)), 0);
+            return `<tr>
+              <td>${escapeHtml(color.managementName)}</td>
+              ${sizes.map(size => `<td><input class="stock-input" type="number" min="0" inputmode="numeric" data-blank-color="${escapeHtml(color.id)}" data-blank-size="${escapeHtml(size.id)}" value="${Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0))}"></td>`).join('')}
+              <td>${total}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  renderBlankSummary();
+
+  box.querySelectorAll('input[data-blank-color]').forEach(input => {
+    const updateLocal = () => {
+      const colorId = input.getAttribute('data-blank-color');
+      const sizeId = input.getAttribute('data-blank-size');
+      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      const blank = { ...(masterDocument.blank_stock || {}) };
+      const body = { ...(blank[state.blankBodyId] || {}) };
+      const color = { ...(body[colorId] || {}) };
+      if(qty > 0) color[sizeId] = { qty, updatedAt: nowIso() };
+      else delete color[sizeId];
+      if(Object.keys(color).length) body[colorId] = color;
+      else delete body[colorId];
+      if(Object.keys(body).length) blank[state.blankBodyId] = body;
+      else delete blank[state.blankBodyId];
+      masterDocument = { ...masterDocument, blank_stock: blank };
+      renderBlankSummary();
+    };
+    input.addEventListener('input', updateLocal);
+    input.addEventListener('change', async () => {
+      updateLocal();
+      await saveMasterData({ blank_stock: masterDocument.blank_stock || {} });
+      renderBlankStock();
+    });
+  });
+}
+
+function sheetTotals(){
+  const sheet = masterDocument?.print_sheets || {};
+  const rows = Object.values(sheet);
+  return {
+    total: rows.reduce((sum, item) => sum + Math.max(0, Number(item?.qty || 0)), 0),
+    designs: rows.filter(item => Math.max(0, Number(item?.qty || 0)) > 0).length
+  };
+}
+
+function renderSheetInventory(){
+  const summary = document.getElementById('sheet-summary');
+  const box = document.getElementById('sheet-app');
+  if(!summary || !box) return;
+  if(!masterReady || !masterDocument){
+    summary.innerHTML = '';
+    box.innerHTML = '<div class="production-empty">マスターデータに接続すると入力できます。</div>';
+    return;
+  }
+  const totals = sheetTotals();
+  summary.innerHTML = `<div class="mini-summary"><span>シート合計 <strong>${totals.total}</strong> 枚</span><span>Design <strong>${totals.designs}</strong> 種</span></div>`;
+  const sheet = masterDocument.print_sheets || {};
+  const designs = masterDesigns();
+  box.innerHTML = `<div class="sheet-list">${designs.map(design => `
+    <div class="sheet-row">
+      <div class="sheet-name">${design.starred ? '★ ' : ''}${escapeHtml(design.managementName)}</div>
+      <input class="sheet-input" type="number" min="0" inputmode="numeric" data-sheet-design="${escapeHtml(design.id)}" value="${Math.max(0, Number(sheet?.[design.id]?.qty || 0))}">
+    </div>`).join('')}</div>`;
+  box.querySelectorAll('input[data-sheet-design]').forEach(input => {
+    const updateLocal = () => {
+      const designId = input.getAttribute('data-sheet-design');
+      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      const next = { ...(masterDocument.print_sheets || {}) };
+      if(qty > 0) next[designId] = { qty, updatedAt: nowIso() };
+      else delete next[designId];
+      masterDocument = { ...masterDocument, print_sheets: next };
+      const totalsNow = sheetTotals();
+      summary.innerHTML = `<div class="mini-summary"><span>シート合計 <strong>${totalsNow.total}</strong> 枚</span><span>Design <strong>${totalsNow.designs}</strong> 種</span></div>`;
+    };
+    input.addEventListener('input', updateLocal);
+    input.addEventListener('change', async () => {
+      updateLocal();
+      await saveMasterData({ print_sheets: masterDocument.print_sheets || {} });
+    });
+  });
+}
+
+function renderPlanTabs(){
+  const tabs = document.getElementById('plan-design-tabs');
+  if(!tabs) return;
+  if(!state.designs[state.activePlanDesign]) state.activePlanDesign = state.activeDesign || Object.keys(state.designs)[0];
+  tabs.innerHTML = sortedDesignNames().map(name => {
+    const star = state.designs[name].starred ? '<span class="tab-star">★</span>' : '';
+    return `<button class="tab ${name === state.activePlanDesign ? 'active' : ''}" data-plan-design="${escapeHtml(name)}">${star}${escapeHtml(name)}</button>`;
+  }).join('');
+  tabs.querySelectorAll('button[data-plan-design]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.activePlanDesign = btn.getAttribute('data-plan-design');
+      saveLocal();
+      renderPlanTabs();
+      renderPlanEditor();
+    });
+  });
+}
+
+function renderPlanEditor(){
+  const box = document.getElementById('plan-app');
+  if(!box) return;
+  const design = state.activePlanDesign;
+  if(!state.designs[design]){
+    box.innerHTML = '';
+    return;
+  }
+  ensureStock(design);
+  const d = state.designs[design];
+  box.innerHTML = `
+    <div class="total-row">
+      <span class="total-label">${escapeHtml(design)} 制作予定</span>
+      <span class="total-value">${totalPlannedForDesign(design)}<span class="total-unit"> 枚</span></span>
+    </div>
+    <div class="size-header">${SIZES.map(s => `<div>${s}</div>`).join('')}</div>
+    ${d.colors.map(color => `
+      <div class="color-card">
+        <div class="planned-row" style="border-top:none;margin-top:0;padding-top:0;">
+          <div class="planned-label">${escapeHtml(color)}</div>
+          ${SIZES.map(size => `<div class="size-cell"><input class="planned-input" type="number" min="0" inputmode="numeric" data-plan-color="${escapeHtml(color)}" data-plan-size="${escapeHtml(size)}" value="${Math.max(0, Number(d.planned?.[color]?.[size] || 0))}"></div>`).join('')}
+        </div>
+        <div class="card-footer"><span class="subtotal">制作予定 ${totalPlannedForColor(design, color)} 枚</span></div>
+      </div>`).join('')}`;
+  box.querySelectorAll('input[data-plan-color]').forEach(input => {
+    const updateLocal = () => {
+      const color = input.getAttribute('data-plan-color');
+      const size = input.getAttribute('data-plan-size');
+      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      d.planned[color][size] = qty;
+      renderProductionSummary();
+      saveLocal();
+    };
+    input.addEventListener('input', updateLocal);
+    input.addEventListener('change', () => {
+      updateLocal();
+      save();
+      renderPlanEditor();
+    });
+  });
+}
+
+function setActiveView(view){
+  const allowed = ['finished','blank','sheets','plan'];
+  state.activeView = allowed.includes(view) ? view : 'finished';
+  document.querySelectorAll('#main-nav button[data-view]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-view') === state.activeView));
+  allowed.forEach(name => {
+    const panel = document.getElementById(`view-${name}`);
+    if(panel) panel.hidden = name !== state.activeView;
+  });
+  saveLocal();
+  renderCurrentView();
+}
+
+function renderCurrentView(){
+  renderBodySettings();
+  if(state.activeView === 'finished'){
+    renderTabs();
+    render();
+  } else if(state.activeView === 'blank'){
+    renderBlankStock();
+  } else if(state.activeView === 'sheets'){
+    renderSheetInventory();
+  } else if(state.activeView === 'plan'){
+    renderProductionSummary();
+    renderPlanTabs();
+    renderPlanEditor();
+  }
+}
+
+
 function exportInventoryCsv(){
   const rows = [['デザイン','色','サイズ','在庫数','制作予定','優先']];
   Object.keys(state.designs).forEach(design => {
@@ -1059,7 +1663,10 @@ function saveLocal(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({
       activeDesign: state.activeDesign,
-      sortMode: state.sortMode
+      sortMode: state.sortMode,
+      activeView: state.activeView,
+      activePlanDesign: state.activePlanDesign,
+      blankBodyId: state.blankBodyId
     }));
   } catch(e){
     console.error('local save failed', e);
@@ -1092,6 +1699,8 @@ async function saveCloudNow(){
       masterDocument = { ...(masterDocument || {}), ...patch };
       masterError = null;
       renderSchemaStatus(masterDocument);
+      renderMasterUpdated(masterDocument?.updatedAt);
+      if(state.activeView !== 'finished') renderCurrentView();
     } catch(e){
       console.error('master mirror save failed', e);
       masterReady = false;
@@ -1145,7 +1754,6 @@ function renderTabs(){
 
 function render(){
   renderStockSummary();
-  renderProductionSummary();
   const design = state.activeDesign;
   if(!state.designs[design]) return;
   ensureStock(design);
@@ -1157,11 +1765,6 @@ function render(){
     <span class="total-label">${design} 合計在庫</span>
     <span class="total-value">${totalForDesign(design)}<span class="total-unit"> 枚</span></span>
   </div>`;
-  html += `<div class="total-row">
-    <span class="total-label">制作予定 合計</span>
-    <span class="total-value">${totalPlannedForDesign(design)}<span class="total-unit"> 枚</span></span>
-  </div>`;
-
   html += `<div class="design-settings">
     <div>
       <span class="priority-label">制作優先</span>
@@ -1188,17 +1791,8 @@ function render(){
           </div>`;
         }).join('')}
       </div>
-      <div class="planned-row">
-        <div class="planned-label">制作予定</div>
-        ${SIZES.map(size => {
-          const plannedQty = d.planned[color][size];
-          return `<div class="size-cell">
-            <input class="planned-input" type="number" min="0" inputmode="numeric" data-planned-color="${color}" data-planned-size="${size}" value="${plannedQty}">
-          </div>`;
-        }).join('')}
-      </div>
       <div class="card-footer">
-        <span class="subtotal">在庫 ${totalForColor(design,color)} 枚　制作予定 ${totalPlannedForColor(design,color)} 枚</span>
+        <span class="subtotal">在庫 ${totalForColor(design,color)} 枚</span>
         <button class="remove-btn" data-remove-color="${color}">削除</button>
       </div>
     </div>`;
@@ -1219,23 +1813,6 @@ function render(){
       save();
     });
   }
-
-  app.querySelectorAll('input[data-planned-color]').forEach(input => {
-    const updatePlannedValue = () => {
-      const color = input.getAttribute('data-planned-color');
-      const size = input.getAttribute('data-planned-size');
-      const value = Math.max(0, parseInt(input.value, 10) || 0);
-      d.planned[color][size] = value;
-      renderProductionSummary();
-      saveLocal();
-    };
-    input.addEventListener('input', updatePlannedValue);
-    input.addEventListener('change', () => {
-      updatePlannedValue();
-      save();
-      render();
-    });
-  });
 
   app.querySelectorAll('button[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1327,6 +1904,27 @@ document.getElementById('sort-mode').addEventListener('change', (e) => {
 document.getElementById('export-inventory-btn').addEventListener('click', exportInventoryCsv);
 document.getElementById('backup-json-btn').addEventListener('click', exportJsonBackup);
 
+document.querySelectorAll('#main-nav button[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => setActiveView(btn.getAttribute('data-view')));
+});
+
+document.getElementById('body-settings-toggle').addEventListener('click', () => {
+  const panel = document.getElementById('body-settings-panel');
+  panel.hidden = !panel.hidden;
+  if(!panel.hidden) renderBodySettings();
+});
+
+document.getElementById('add-body-btn').addEventListener('click', addBodyMaster);
+document.getElementById('new-body-management').addEventListener('keydown', e => {
+  if(e.key === 'Enter') addBodyMaster();
+});
+
+document.getElementById('blank-body-select').addEventListener('change', e => {
+  state.blankBodyId = e.target.value;
+  saveLocal();
+  renderBlankStock();
+});
+
 async function init(){
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -1339,12 +1937,18 @@ async function init(){
       const ui = JSON.parse(uiRaw);
       if(ui.activeDesign) state.activeDesign = ui.activeDesign;
       if(ui.sortMode) state.sortMode = ui.sortMode;
+      if(ui.activeView) state.activeView = ui.activeView;
+      if(ui.activePlanDesign) state.activePlanDesign = ui.activePlanDesign;
+      if(ui.blankBodyId) state.blankBodyId = ui.blankBodyId;
     }
   } catch(e) {
     console.log('no existing local data, using defaults');
   }
 
   if(!state.sortMode) state.sortMode = 'priority';
+  if(!state.activeView) state.activeView = 'finished';
+  if(!state.activePlanDesign) state.activePlanDesign = state.activeDesign || Object.keys(state.designs)[0];
+  if(!state.blankBodyId) state.blankBodyId = LEGACY_BODY_ID;
   Object.values(state.designs).forEach(d => {
     if(d.starred == null) d.starred = Number(d.priority) === 1;
     if(!d.planned) d.planned = {};
@@ -1352,10 +1956,10 @@ async function init(){
   if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
   document.getElementById('sort-mode').value = state.sortMode;
 
-  renderTabs();
-  render();
   renderSchemaStatus(null, 'loading');
   renderLastUpdated(null);
+  renderMasterUpdated(null);
+  setActiveView(state.activeView);
 
   try {
     setSyncStatus('在庫データに接続しています…');
@@ -1385,8 +1989,7 @@ async function init(){
     cloudReady = true;
     setSyncStatus('共有済み', 'ok');
     renderLastUpdated(sharedDocument?.updatedAt);
-    renderTabs();
-    render();
+    renderCurrentView();
 
     await ensureMasterDocument();
 
@@ -1401,8 +2004,7 @@ async function init(){
         });
         if(!state.designs[state.activeDesign]) state.activeDesign = Object.keys(state.designs)[0];
         saveLocal();
-        renderTabs();
-        render();
+        renderCurrentView();
       }
       renderLastUpdated(sharedDocument?.updatedAt);
       setSyncStatus(snapshot.metadata.hasPendingWrites ? '同期中…' : '共有済み', snapshot.metadata.hasPendingWrites ? '' : 'ok');
@@ -1418,6 +2020,8 @@ async function init(){
         masterError = null;
         masterReady = true;
         renderSchemaStatus(masterDocument);
+        renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt);
+        renderCurrentView();
       }, (error) => {
         console.error('master snapshot error', error);
         masterReady = false;
