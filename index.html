@@ -809,6 +809,62 @@
   }
   body.master-authority .legacy-editor-row { display: none; }
 
+
+  .color-settings-panel {
+    margin: 0 0 14px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  .color-settings-panel[hidden] { display: none; }
+  .color-master-head,
+  .color-master-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) minmax(105px, 1.1fr) minmax(105px, 1.05fr);
+    gap: 8px;
+    align-items: center;
+  }
+  .color-master-head {
+    margin-bottom: 6px;
+    padding: 0 2px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .color-master-row { margin-bottom: 8px; }
+  .color-master-row input,
+  .color-master-row select {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding: 0 8px;
+    font-size: 13px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .color-mapping-note {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .color-mapping-warning {
+    margin: 0 0 10px;
+    padding: 9px 10px;
+    border-radius: 9px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .finished-filter-note {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
 </style>
 </head>
 <body>
@@ -831,8 +887,9 @@
   <button type="button" data-view="plan">制作予定</button>
 </nav>
 
-<div class="master-tools">
+<div class="master-tools" style="gap:8px;">
   <button id="body-settings-toggle" class="secondary-btn" type="button">Body設定</button>
+  <button id="color-settings-toggle" class="secondary-btn" type="button">Color設定</button>
 </div>
 <div id="body-settings-panel" class="body-settings-panel" hidden>
   <div class="section-title">Bodyマスター</div>
@@ -843,6 +900,15 @@
     <input id="new-body-sales" type="text" placeholder="販売用名称" />
     <button id="add-body-btn" class="icon-btn" type="button">＋</button>
   </div>
+</div>
+
+<div id="color-settings-panel" class="color-settings-panel" hidden>
+  <div class="section-title">Colorマスター</div>
+  <div class="section-note">ColorごとにBodyを紐づけます。完成品と未プリント在庫はこの設定で自動的に絞り込みます。</div>
+  <div id="color-mapping-warning"></div>
+  <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>Body</span></div>
+  <div id="color-master-list"></div>
+  <div class="color-mapping-note">現在の完成品在庫からBodyが一意に分かるColorは自動設定します。</div>
 </div>
 
 <section id="view-finished" class="view-panel">
@@ -856,6 +922,7 @@
       <div id="finished-body-total" class="finished-body-total"></div>
     </div>
     <div class="master-sync-note">ここで変更した在庫を tshirtStock/master に保存し、Body合計を tshirtStock/shared へ自動同期します。</div>
+    <div class="finished-filter-note">選択したBodyに紐づくColorだけを表示します。</div>
   </div>
   <div class="sort-row">
     <span class="sort-label">並び替え</span>
@@ -1392,6 +1459,20 @@ function renderStockSummary(){
   const box = document.getElementById('stock-summary');
   if(!box) return;
   const total = totalStockAll();
+  if(inventoryAuthorityActive() && state.finishedBodyId){
+    const body = masterDocument?.masters?.bodies?.[state.finishedBodyId];
+    const bodyTotal = masterInventoryBodyTotal(state.finishedBodyId);
+    box.innerHTML = `
+      <div class="stock-summary">
+        <span class="stock-summary-label">${escapeHtml(body?.managementName || '選択Body')} 在庫</span>
+        <span class="stock-summary-value">${bodyTotal}<span class="stock-summary-unit"> 枚</span></span>
+      </div>
+      <div class="stock-summary" style="padding:9px 12px;">
+        <span class="stock-summary-label">全Body 合計</span>
+        <span style="font-size:16px;font-weight:700;">${total}<span class="stock-summary-unit"> 枚</span></span>
+      </div>`;
+    return;
+  }
   box.innerHTML = `
     <div class="stock-summary">
       <span class="stock-summary-label">Tシャツ実在庫 合計</span>
@@ -1578,6 +1659,139 @@ function masterColorByName(name){
     String(item?.legacyKey || '').trim().toLowerCase() === key ||
     String(item?.managementName || '').trim().toLowerCase() === key
   );
+}
+
+
+function colorUsageBodyIds(colorId){
+  const ids = new Set();
+  Object.entries(masterDocument?.inventory_v2 || {}).forEach(([bodyId, designTree]) => {
+    if(bodyId === LEGACY_BODY_ID) return;
+    Object.values(designTree || {}).forEach(colorTree => {
+      const sizeTree = colorTree?.[colorId] || {};
+      const hasQty = Object.values(sizeTree).some(cell => Math.max(0, Number(cell?.qty || 0)) > 0);
+      if(hasQty) ids.add(bodyId);
+    });
+  });
+  return Array.from(ids);
+}
+
+function colorMappedBodyId(colorName){
+  return masterColorByName(colorName)?.bodyId || '';
+}
+
+function colorsForBody(designName, bodyId){
+  const d = state.designs?.[designName];
+  if(!d || !bodyId) return [];
+  return (d.colors || []).filter(colorName => {
+    const color = masterColorByName(colorName);
+    if(!color) return false;
+    if(color.bodyId === bodyId) return true;
+    if(!color.bodyId && masterTotalForColorName(designName, colorName, bodyId) > 0) return true;
+    return false;
+  });
+}
+
+function colorMappingStats(){
+  const colors = masterColors();
+  let mapped = 0;
+  let ambiguous = 0;
+  colors.forEach(color => {
+    if(color.bodyId) mapped += 1;
+    if(colorUsageBodyIds(color.id).length > 1) ambiguous += 1;
+  });
+  return { total: colors.length, mapped, unmapped: Math.max(0, colors.length - mapped), ambiguous };
+}
+
+async function inferColorBodyMappings(){
+  if(!inventoryAuthorityActive() || !masterDocument?.masters?.colors) return false;
+  const colorsMap = { ...(masterDocument.masters.colors || {}) };
+  let changed = false;
+  Object.entries(colorsMap).forEach(([colorId, color]) => {
+    if(color.bodyId) return;
+    const usage = colorUsageBodyIds(colorId);
+    if(usage.length === 1){
+      colorsMap[colorId] = { ...color, bodyId: usage[0], updatedAt: nowIso() };
+      changed = true;
+    }
+  });
+  if(!changed) return false;
+  const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
+  masterDocument = { ...masterDocument, masters };
+  await saveMasterData({ masters });
+  return true;
+}
+
+function renderColorSettings(){
+  const panel = document.getElementById('color-settings-panel');
+  const list = document.getElementById('color-master-list');
+  const warning = document.getElementById('color-mapping-warning');
+  if(!panel || !list || !warning) return;
+
+  if(!masterReady || !masterDocument){
+    list.innerHTML = '<div class="production-empty">マスターデータに接続すると編集できます。</div>';
+    warning.innerHTML = '';
+    return;
+  }
+
+  const bodies = assignableBodies();
+  const colors = masterColors();
+  const stats = colorMappingStats();
+  if(stats.ambiguous > 0){
+    warning.innerHTML = `<div class="color-mapping-warning">${stats.ambiguous}色は現在複数Bodyに完成品在庫があります。Bodyを一意に決める前に在庫内容を確認してください。</div>`;
+  } else if(stats.unmapped > 0){
+    warning.innerHTML = `<div class="color-mapping-warning">Body未設定のColorが${stats.unmapped}色あります。</div>`;
+  } else {
+    warning.innerHTML = '';
+  }
+
+  list.innerHTML = colors.map(color => {
+    const usage = colorUsageBodyIds(color.id);
+    const hasConflict = usage.length > 1;
+    const options = [
+      `<option value="">未設定</option>`,
+      ...bodies.map(body => `<option value="${escapeHtml(body.id)}" ${color.bodyId === body.id ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`)
+    ].join('');
+    return `<div class="color-master-row">
+      <input type="text" data-color-management="${escapeHtml(color.id)}" value="${escapeHtml(color.managementName || '')}" readonly>
+      <input type="text" data-color-sales="${escapeHtml(color.id)}" value="${escapeHtml(color.pinkoiName || color.managementName || '')}" placeholder="販売用名称">
+      <select data-color-body="${escapeHtml(color.id)}" ${hasConflict ? 'disabled' : ''}>${options}</select>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('input[data-color-sales]').forEach(input => {
+    input.addEventListener('change', async () => {
+      const id = input.getAttribute('data-color-sales');
+      const colorsMap = { ...(masterDocument.masters?.colors || {}) };
+      if(!colorsMap[id]) return;
+      colorsMap[id] = { ...colorsMap[id], pinkoiName: input.value.trim(), updatedAt: nowIso() };
+      const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
+      masterDocument = { ...masterDocument, masters };
+      await saveMasterData({ masters });
+      renderCurrentView();
+    });
+  });
+
+  list.querySelectorAll('select[data-color-body]').forEach(select => {
+    select.addEventListener('change', async () => {
+      const id = select.getAttribute('data-color-body');
+      const nextBodyId = select.value;
+      const usage = colorUsageBodyIds(id);
+      const conflictingUsage = usage.filter(bodyId => nextBodyId && bodyId !== nextBodyId);
+      if(conflictingUsage.length){
+        alert('このColorの完成品在庫は別のBodyにあります。現在の在庫を確認してからBody設定を変更してください。');
+        renderColorSettings();
+        return;
+      }
+      const colorsMap = { ...(masterDocument.masters?.colors || {}) };
+      if(!colorsMap[id]) return;
+      colorsMap[id] = { ...colorsMap[id], bodyId: nextBodyId || '', updatedAt: nowIso() };
+      const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
+      masterDocument = { ...masterDocument, masters };
+      await saveMasterData({ masters });
+      renderCurrentView();
+      renderColorSettings();
+    });
+  });
 }
 
 function masterSizeByName(name){
@@ -1813,7 +2027,8 @@ function renderFinishedBodySelector(){
   if(!bodies.some(b => b.id === state.finishedBodyId)) state.finishedBodyId = bodies[0]?.id || '';
   select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.finishedBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
   const bodyTotal = state.finishedBodyId ? masterInventoryBodyTotal(state.finishedBodyId) : 0;
-  totalBox.innerHTML = `<span>選択Body</span><strong>${bodyTotal}</strong><span>枚</span>`;
+  const mappedColors = masterColors().filter(color => color.bodyId === state.finishedBodyId).length;
+  totalBox.innerHTML = `<span>選択Body</span><strong>${bodyTotal}</strong><span>枚</span><span style="margin-left:6px;">Color ${mappedColors}</span>`;
 }
 
 async function saveMasterData(fields){
@@ -2300,7 +2515,12 @@ function renderBlankStock(){
   }
   select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.blankBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
 
-  const colors = masterColors();
+  const colors = masterColors().filter(color => {
+    if(!state.blankBodyId || state.blankBodyId === LEGACY_BODY_ID) return true;
+    if(color.bodyId === state.blankBodyId) return true;
+    const existing = masterDocument?.blank_stock?.[state.blankBodyId]?.[color.id] || {};
+    return Object.values(existing).some(cell => Math.max(0, Number(cell?.qty || 0)) > 0);
+  });
   const sizes = masterSizes();
   const bodyStock = masterDocument.blank_stock?.[state.blankBodyId] || {};
   box.innerHTML = `
@@ -2467,6 +2687,7 @@ function setActiveView(view){
 
 function renderCurrentView(){
   renderBodySettings();
+  renderColorSettings();
   if(inventoryAuthorityActive()) document.body.classList.add('master-authority');
   else document.body.classList.remove('master-authority');
 
@@ -2626,8 +2847,14 @@ function sortedDesignNames(){
       const sb = state.designs[b].starred ? 1 : 0;
       return sb - sa;
     }
-    if(mode === 'stock-asc') return totalForDesign(a) - totalForDesign(b);
-    if(mode === 'stock-desc') return totalForDesign(b) - totalForDesign(a);
+    if(mode === 'stock-asc'){
+      if(inventoryAuthorityActive() && state.finishedBodyId) return masterTotalForDesignName(a, state.finishedBodyId) - masterTotalForDesignName(b, state.finishedBodyId);
+      return totalForDesign(a) - totalForDesign(b);
+    }
+    if(mode === 'stock-desc'){
+      if(inventoryAuthorityActive() && state.finishedBodyId) return masterTotalForDesignName(b, state.finishedBodyId) - masterTotalForDesignName(a, state.finishedBodyId);
+      return totalForDesign(b) - totalForDesign(a);
+    }
     if(mode === 'name') return a.localeCompare(b, 'ja');
     return 0;
   });
@@ -2682,13 +2909,17 @@ function render(){
     <button class="star-btn ${d.starred ? 'active' : ''}" id="star-priority-btn" type="button">${d.starred ? '★ 優先' : '☆ 優先'}</button>
   </div>`;
 
-  if(d.colors.length > 0){
+  const visibleColors = inventoryAuthorityActive() && selectedBodyId
+    ? colorsForBody(design, selectedBodyId)
+    : d.colors;
+
+  if(visibleColors.length > 0){
     html += '<div class="size-header">' + SIZES.map(s => `<div>${s}</div>`).join('') + '</div>';
   } else {
-    html += '<p class="empty-note">色が登録されていません。</p>';
+    html += '<p class="empty-note">このBodyに紐づくColorはありません。Color設定を確認してください。</p>';
   }
 
-  d.colors.forEach(color => {
+  visibleColors.forEach(color => {
     html += `<div class="color-card">
       <div class="color-row">
         <div class="color-name">${escapeHtml(color)}</div>
@@ -2749,6 +2980,7 @@ function render(){
         const cm = masterColorByName(color);
         const sm = masterSizeByName(size);
         if(!bodyId || !dm || !cm || !sm) return;
+        if(cm.bodyId && cm.bodyId !== bodyId) return;
         btn.disabled = true;
         const inventory = structuredClone(masterDocument.inventory_v2 || {});
         if(!inventory[bodyId]) inventory[bodyId] = {};
@@ -2839,6 +3071,12 @@ document.getElementById('body-settings-toggle').addEventListener('click', () => 
   if(!panel.hidden) renderBodySettings();
 });
 
+document.getElementById('color-settings-toggle').addEventListener('click', () => {
+  const panel = document.getElementById('color-settings-panel');
+  panel.hidden = !panel.hidden;
+  if(!panel.hidden) renderColorSettings();
+});
+
 document.getElementById('add-body-btn').addEventListener('click', addBodyMaster);
 document.getElementById('new-body-management').addEventListener('keydown', e => {
   if(e.key === 'Enter') addBodyMaster();
@@ -2854,6 +3092,7 @@ document.getElementById('assign-body-select').addEventListener('change', e => {
 document.getElementById('finished-body-select').addEventListener('change', e => {
   state.finishedBodyId = e.target.value;
   saveLocal();
+  renderTabs();
   render();
 });
 
@@ -2937,7 +3176,10 @@ async function init(){
     if(masterReady){
       if(!inventoryAuthorityActive()) await reconcileBodyAssignmentFromShared(true);
       await maybeActivateMasterAuthority();
-      if(inventoryAuthorityActive()) await syncSharedFromMaster();
+      if(inventoryAuthorityActive()){
+        await inferColorBodyMappings();
+        await syncSharedFromMaster();
+      }
       renderCurrentView();
     }
 
