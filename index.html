@@ -594,14 +594,24 @@
   }
   .sheet-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 92px;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 78px 78px;
+    gap: 8px;
     align-items: center;
     padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--card);
   }
+  .sheet-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 78px 78px;
+    gap: 8px;
+    padding: 0 12px 3px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+  .sheet-head span:first-child { text-align: left; }
   .sheet-name {
     min-width: 0;
     overflow: hidden;
@@ -614,6 +624,68 @@
     text-align: center;
     font-weight: 700;
   }
+  .order-input {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    padding: 0 3px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .blank-cell-wrap {
+    display: grid;
+    gap: 5px;
+    min-width: 58px;
+  }
+  .blank-stock-control {
+    display: grid;
+    grid-template-columns: 24px minmax(22px, 1fr) 24px;
+    align-items: center;
+    gap: 2px;
+  }
+  .mini-qty-btn {
+    width: 24px;
+    height: 26px;
+    padding: 0;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1;
+  }
+  .mini-qty-val {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .order-mini {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: center;
+    gap: 2px;
+  }
+  .order-mini-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+  .order-mini .order-input {
+    height: 26px;
+    font-size: 12px;
+  }
+  .cell-total {
+    display: grid;
+    gap: 2px;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .cell-total strong { font-size: 12px; }
   .plan-body-note {
     margin: 0 0 12px;
     padding: 9px 11px;
@@ -1219,7 +1291,9 @@ function buildV2SchemaFromLegacy(designs){
     inventory_v2: inventory,
     production_plan_v2: productionPlan,
     blank_stock: {},
+    blank_orders: {},
     print_sheets: {},
+    sheet_orders: {},
     migration: {
       from: 'designs',
       version: 1,
@@ -1300,7 +1374,9 @@ function buildMasterMirrorPatch(){
       [LEGACY_BODY_ID]: residualTree(built.production_plan_v2[LEGACY_BODY_ID], existingPlan)
     },
     blank_stock: masterDocument?.blank_stock || {},
+    blank_orders: masterDocument?.blank_orders || {},
     print_sheets: masterDocument?.print_sheets || {},
+    sheet_orders: masterDocument?.sheet_orders || {},
     migration: masterDocument?.migration || built.migration
   };
 }
@@ -1947,6 +2023,12 @@ function masterInventoryQty(bodyId, designId, colorId, sizeId){
   return Math.max(0, Number(masterDocument?.inventory_v2?.[bodyId]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
 }
 
+function masterInventoryQtyAll(designId, colorId, sizeId){
+  return Object.keys(masterDocument?.inventory_v2 || {})
+    .filter(bodyId => bodyId !== LEGACY_BODY_ID)
+    .reduce((sum, bodyId) => sum + masterInventoryQty(bodyId, designId, colorId, sizeId), 0);
+}
+
 function masterFinishedGrandTotal(){
   if(!masterDocument) return 0;
   const bodyIds = Object.keys(masterDocument.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
@@ -2165,11 +2247,14 @@ function renderFinishedBodySelector(){
   }
   bar.style.display = '';
   const bodies = assignableBodies();
-  if(!bodies.some(b => b.id === state.finishedBodyId)) state.finishedBodyId = bodies[0]?.id || '';
-  select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.finishedBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
-  const bodyTotal = state.finishedBodyId ? masterInventoryBodyTotal(state.finishedBodyId) : 0;
-  const mappedColors = masterColors().filter(color => color.bodyId === state.finishedBodyId).length;
-  totalBox.innerHTML = `<span>選択Body</span><strong>${bodyTotal}</strong><span>枚</span><span style="margin-left:6px;">Color ${mappedColors}</span>`;
+  if(state.finishedBodyId && !bodies.some(b => b.id === state.finishedBodyId)) state.finishedBodyId = '';
+  select.innerHTML = `<option value="" ${!state.finishedBodyId ? 'selected' : ''}>すべて</option>` +
+    bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.finishedBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
+  const bodyTotal = state.finishedBodyId ? masterInventoryBodyTotal(state.finishedBodyId) : masterFinishedGrandTotal();
+  const mappedColors = state.finishedBodyId
+    ? masterColors().filter(color => color.bodyId === state.finishedBodyId).length
+    : masterColors().filter(color => color.bodyId).length;
+  totalBox.innerHTML = `<span>${state.finishedBodyId ? '選択Body' : 'すべて'}</span><strong>${bodyTotal}</strong><span>枚</span><span style="margin-left:6px;">Color ${mappedColors}</span>`;
 }
 
 async function saveMasterData(fields){
@@ -2633,11 +2718,52 @@ function blankGrandTotal(){
   return Object.keys(all).reduce((sum, bodyId) => sum + blankTotalForBody(bodyId), 0);
 }
 
+function blankOrderTotalForBody(bodyId){
+  const body = masterDocument?.blank_orders?.[bodyId] || {};
+  let total = 0;
+  Object.values(body).forEach(colorMap => {
+    Object.values(colorMap || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  });
+  return total;
+}
+
+function blankOrderGrandTotal(){
+  const all = masterDocument?.blank_orders || {};
+  return Object.keys(all).reduce((sum, bodyId) => sum + blankOrderTotalForBody(bodyId), 0);
+}
+
 function renderBlankSummary(){
   const box = document.getElementById('blank-summary');
   if(!box) return;
   const selected = state.blankBodyId || LEGACY_BODY_ID;
-  box.innerHTML = `<div class="mini-summary"><span>選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>`;
+  box.innerHTML = `
+    <div class="mini-summary"><span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
+    <div class="mini-summary"><span>発注数　選択Body <strong>${blankOrderTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>`;
+}
+
+function setNestedQty(root, bodyId, colorId, sizeId, qty){
+  const next = structuredClone(root || {});
+  if(!next[bodyId]) next[bodyId] = {};
+  if(!next[bodyId][colorId]) next[bodyId][colorId] = {};
+  if(qty > 0) next[bodyId][colorId][sizeId] = { qty, updatedAt: nowIso() };
+  else {
+    delete next[bodyId][colorId][sizeId];
+    if(!Object.keys(next[bodyId][colorId]).length) delete next[bodyId][colorId];
+    if(!Object.keys(next[bodyId]).length) delete next[bodyId];
+  }
+  return next;
+}
+
+async function saveBlankQty(bodyId, colorId, sizeId, qty){
+  const next = setNestedQty(masterDocument?.blank_stock || {}, bodyId, colorId, sizeId, qty);
+  masterDocument = { ...masterDocument, blank_stock: next };
+  return await saveMasterData({ blank_stock: next });
+}
+
+async function saveBlankOrderQty(bodyId, colorId, sizeId, qty){
+  const next = setNestedQty(masterDocument?.blank_orders || {}, bodyId, colorId, sizeId, qty);
+  masterDocument = { ...masterDocument, blank_orders: next };
+  return await saveMasterData({ blank_orders: next });
 }
 
 function renderBlankStock(){
@@ -2659,22 +2785,37 @@ function renderBlankStock(){
   const colors = masterColors().filter(color => {
     if(!state.blankBodyId || state.blankBodyId === LEGACY_BODY_ID) return true;
     if(color.bodyId === state.blankBodyId) return true;
-    const existing = masterDocument?.blank_stock?.[state.blankBodyId]?.[color.id] || {};
-    return Object.values(existing).some(cell => Math.max(0, Number(cell?.qty || 0)) > 0);
+    const existingStock = masterDocument?.blank_stock?.[state.blankBodyId]?.[color.id] || {};
+    const existingOrder = masterDocument?.blank_orders?.[state.blankBodyId]?.[color.id] || {};
+    return [...Object.values(existingStock), ...Object.values(existingOrder)].some(cell => Math.max(0, Number(cell?.qty || 0)) > 0);
   });
   const sizes = masterSizes();
   const bodyStock = masterDocument.blank_stock?.[state.blankBodyId] || {};
+  const bodyOrders = masterDocument.blank_orders?.[state.blankBodyId] || {};
   box.innerHTML = `
     <div class="inventory-grid">
-      <table class="inventory-table">
+      <table class="inventory-table" style="min-width:650px;">
         <thead><tr><th>Color</th>${sizes.map(s => `<th>${escapeHtml(s.managementName)}</th>`).join('')}<th>計</th></tr></thead>
         <tbody>
           ${colors.map(color => {
-            const total = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0)), 0);
+            const stockTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0)), 0);
+            const orderTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0)), 0);
             return `<tr>
               <td>${escapeHtml(color.managementName)}</td>
-              ${sizes.map(size => `<td><input class="stock-input" type="number" min="0" inputmode="numeric" data-blank-color="${escapeHtml(color.id)}" data-blank-size="${escapeHtml(size.id)}" value="${Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0))}"></td>`).join('')}
-              <td>${total}</td>
+              ${sizes.map(size => {
+                const stock = Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0));
+                const order = Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0));
+                const key = `${color.id}|${size.id}`;
+                return `<td><div class="blank-cell-wrap">
+                  <div class="blank-stock-control">
+                    <button class="mini-qty-btn" type="button" data-blank-delta="-1" data-blank-key="${escapeHtml(key)}">−</button>
+                    <span class="mini-qty-val">${stock}</span>
+                    <button class="mini-qty-btn" type="button" data-blank-delta="1" data-blank-key="${escapeHtml(key)}">＋</button>
+                  </div>
+                  <div class="order-mini"><span class="order-mini-label">発注</span><input class="order-input" type="number" min="0" inputmode="numeric" data-blank-order="${escapeHtml(key)}" value="${order}"></div>
+                </div></td>`;
+              }).join('')}
+              <td><div class="cell-total"><span>在庫 <strong>${stockTotal}</strong></span><span>発注 <strong>${orderTotal}</strong></span></div></td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -2682,27 +2823,24 @@ function renderBlankStock(){
     </div>`;
   renderBlankSummary();
 
-  box.querySelectorAll('input[data-blank-color]').forEach(input => {
-    const updateLocal = () => {
-      const colorId = input.getAttribute('data-blank-color');
-      const sizeId = input.getAttribute('data-blank-size');
-      const qty = Math.max(0, parseInt(input.value, 10) || 0);
-      const blank = { ...(masterDocument.blank_stock || {}) };
-      const body = { ...(blank[state.blankBodyId] || {}) };
-      const color = { ...(body[colorId] || {}) };
-      if(qty > 0) color[sizeId] = { qty, updatedAt: nowIso() };
-      else delete color[sizeId];
-      if(Object.keys(color).length) body[colorId] = color;
-      else delete body[colorId];
-      if(Object.keys(body).length) blank[state.blankBodyId] = body;
-      else delete blank[state.blankBodyId];
-      masterDocument = { ...masterDocument, blank_stock: blank };
-      renderBlankSummary();
-    };
-    input.addEventListener('input', updateLocal);
+  box.querySelectorAll('button[data-blank-key]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const [colorId, sizeId] = btn.getAttribute('data-blank-key').split('|');
+      const delta = parseInt(btn.getAttribute('data-blank-delta'), 10) || 0;
+      const bodyId = state.blankBodyId;
+      const current = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+      const nextQty = Math.max(0, current + delta);
+      btn.disabled = true;
+      await saveBlankQty(bodyId, colorId, sizeId, nextQty);
+      renderBlankStock();
+    });
+  });
+
+  box.querySelectorAll('input[data-blank-order]').forEach(input => {
     input.addEventListener('change', async () => {
-      updateLocal();
-      await saveMasterData({ blank_stock: masterDocument.blank_stock || {} });
+      const [colorId, sizeId] = input.getAttribute('data-blank-order').split('|');
+      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      await saveBlankOrderQty(state.blankBodyId, colorId, sizeId, qty);
       renderBlankStock();
     });
   });
@@ -2711,6 +2849,15 @@ function renderBlankStock(){
 function sheetTotals(){
   const sheet = masterDocument?.print_sheets || {};
   const rows = Object.values(sheet);
+  return {
+    total: rows.reduce((sum, item) => sum + Math.max(0, Number(item?.qty || 0)), 0),
+    designs: rows.filter(item => Math.max(0, Number(item?.qty || 0)) > 0).length
+  };
+}
+
+function sheetOrderTotals(){
+  const orders = masterDocument?.sheet_orders || {};
+  const rows = Object.values(orders);
   return {
     total: rows.reduce((sum, item) => sum + Math.max(0, Number(item?.qty || 0)), 0),
     designs: rows.filter(item => Math.max(0, Number(item?.qty || 0)) > 0).length
@@ -2727,29 +2874,41 @@ function renderSheetInventory(){
     return;
   }
   const totals = sheetTotals();
-  summary.innerHTML = `<div class="mini-summary"><span>シート合計 <strong>${totals.total}</strong> 枚</span><span>Design <strong>${totals.designs}</strong> 種</span></div>`;
+  const orderTotals = sheetOrderTotals();
+  summary.innerHTML = `
+    <div class="mini-summary"><span>シート在庫 <strong>${totals.total}</strong> 枚</span><span>Design <strong>${totals.designs}</strong> 種</span></div>
+    <div class="mini-summary"><span>発注数 <strong>${orderTotals.total}</strong> 枚</span><span>Design <strong>${orderTotals.designs}</strong> 種</span></div>`;
   const sheet = masterDocument.print_sheets || {};
+  const orders = masterDocument.sheet_orders || {};
   const designs = masterDesigns();
-  box.innerHTML = `<div class="sheet-list">${designs.map(design => `
+  box.innerHTML = `<div class="sheet-head"><span>Design</span><span>在庫</span><span>発注</span></div><div class="sheet-list">${designs.map(design => `
     <div class="sheet-row">
       <div class="sheet-name">${design.starred ? '★ ' : ''}${escapeHtml(design.managementName)}</div>
       <input class="sheet-input" type="number" min="0" inputmode="numeric" data-sheet-design="${escapeHtml(design.id)}" value="${Math.max(0, Number(sheet?.[design.id]?.qty || 0))}">
+      <input class="order-input" type="number" min="0" inputmode="numeric" data-sheet-order="${escapeHtml(design.id)}" value="${Math.max(0, Number(orders?.[design.id]?.qty || 0))}">
     </div>`).join('')}</div>`;
   box.querySelectorAll('input[data-sheet-design]').forEach(input => {
-    const updateLocal = () => {
+    input.addEventListener('change', async () => {
       const designId = input.getAttribute('data-sheet-design');
       const qty = Math.max(0, parseInt(input.value, 10) || 0);
       const next = { ...(masterDocument.print_sheets || {}) };
       if(qty > 0) next[designId] = { qty, updatedAt: nowIso() };
       else delete next[designId];
       masterDocument = { ...masterDocument, print_sheets: next };
-      const totalsNow = sheetTotals();
-      summary.innerHTML = `<div class="mini-summary"><span>シート合計 <strong>${totalsNow.total}</strong> 枚</span><span>Design <strong>${totalsNow.designs}</strong> 種</span></div>`;
-    };
-    input.addEventListener('input', updateLocal);
+      await saveMasterData({ print_sheets: next });
+      renderSheetInventory();
+    });
+  });
+  box.querySelectorAll('input[data-sheet-order]').forEach(input => {
     input.addEventListener('change', async () => {
-      updateLocal();
-      await saveMasterData({ print_sheets: masterDocument.print_sheets || {} });
+      const designId = input.getAttribute('data-sheet-order');
+      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      const next = { ...(masterDocument.sheet_orders || {}) };
+      if(qty > 0) next[designId] = { qty, updatedAt: nowIso() };
+      else delete next[designId];
+      masterDocument = { ...masterDocument, sheet_orders: next };
+      await saveMasterData({ sheet_orders: next });
+      renderSheetInventory();
     });
   });
 }
@@ -3035,10 +3194,10 @@ function render(){
   const allBodiesTotal = inventoryAuthorityActive() ? masterTotalForDesignName(design) : totalForDesign(design);
 
   html += `<div class="total-row">
-    <span class="total-label">${escapeHtml(design)} ${inventoryAuthorityActive() ? '選択Body在庫' : '合計在庫'}</span>
+    <span class="total-label">${escapeHtml(design)} ${inventoryAuthorityActive() ? (selectedBodyId ? '選択Body在庫' : '全Body在庫') : '合計在庫'}</span>
     <span class="total-value">${selectedBodyTotal}<span class="total-unit"> 枚</span></span>
   </div>`;
-  if(inventoryAuthorityActive()){
+  if(inventoryAuthorityActive() && selectedBodyId){
     html += `<div class="total-row" style="margin-top:-8px;">
       <span class="total-label">${escapeHtml(design)} 全Body合計</span>
       <span class="total-value" style="font-size:20px;">${allBodiesTotal}<span class="total-unit"> 枚</span></span>
@@ -3070,7 +3229,9 @@ function render(){
             const dm = masterDesignByName(design);
             const cm = masterColorByName(color);
             const sm = masterSizeByName(size);
-            qty = dm && cm && sm && selectedBodyId ? masterInventoryQty(selectedBodyId, dm.id, cm.id, sm.id) : 0;
+            qty = dm && cm && sm
+              ? (selectedBodyId ? masterInventoryQty(selectedBodyId, dm.id, cm.id, sm.id) : masterInventoryQtyAll(dm.id, cm.id, sm.id))
+              : 0;
           }
           return `<div class="size-cell">
             <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="-1">−</button>
@@ -3080,7 +3241,7 @@ function render(){
         }).join('')}
       </div>
       <div class="card-footer">
-        <span class="subtotal">${inventoryAuthorityActive() ? `選択Body ${masterTotalForColorName(design,color,selectedBodyId)} 枚 / 全Body ${masterTotalForColorName(design,color)} 枚` : `在庫 ${totalForColor(design,color)} 枚`}</span>
+        <span class="subtotal">${inventoryAuthorityActive() ? (selectedBodyId ? `選択Body ${masterTotalForColorName(design,color,selectedBodyId)} 枚 / 全Body ${masterTotalForColorName(design,color)} 枚` : `全Body ${masterTotalForColorName(design,color)} 枚`) : `在庫 ${totalForColor(design,color)} 枚`}</span>
       </div>
     </div>`;
   });
@@ -3116,10 +3277,10 @@ function render(){
       const delta = parseInt(btn.getAttribute('data-delta'));
 
       if(inventoryAuthorityActive()){
-        const bodyId = state.finishedBodyId;
         const dm = masterDesignByName(design);
         const cm = masterColorByName(color);
         const sm = masterSizeByName(size);
+        const bodyId = state.finishedBodyId || cm?.bodyId || '';
         if(!bodyId || !dm || !cm || !sm) return;
         if(cm.bodyId && cm.bodyId !== bodyId) return;
         btn.disabled = true;
