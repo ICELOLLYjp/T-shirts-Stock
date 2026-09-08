@@ -1266,6 +1266,7 @@ async function ensureMasterDocument(){
       masterDocument = v2;
     }
     masterReady = true;
+    await reconcileBodyAssignmentFromShared(true);
     renderSchemaStatus(masterDocument);
     renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt || masterDocument?.migration?.migratedAt);
     renderCurrentView();
@@ -1599,6 +1600,79 @@ function assignedInventoryTotal(){
     .reduce((sum, bodyId) => sum + masterInventoryBodyTotal(bodyId), 0);
 }
 
+function buildReconciledInventoryFromShared(){
+  if(!masterDocument) return { ok: false, issues: ['master not ready'] };
+
+  const expectedLegacy = buildV2SchemaFromLegacy(state.designs).inventory_v2?.[LEGACY_BODY_ID] || {};
+  const currentInventory = structuredClone(masterDocument.inventory_v2 || {});
+  const assignedByKey = new Map();
+  const issues = [];
+
+  Object.entries(currentInventory).forEach(([bodyId, designTree]) => {
+    if(bodyId === LEGACY_BODY_ID) return;
+    Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+      Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+        Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+          const qty = Math.max(0, Number(cell?.qty || 0));
+          if(qty <= 0) return;
+          const key = `${designId}|${colorId}|${sizeId}`;
+          assignedByKey.set(key, (assignedByKey.get(key) || 0) + qty);
+        });
+      });
+    });
+  });
+
+  const residual = {};
+  Object.entries(expectedLegacy).forEach(([designId, colorTree]) => {
+    Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+      Object.entries(sizeTree || {}).forEach(([sizeId, totalCell]) => {
+        const totalQty = Math.max(0, Number(totalCell?.qty || 0));
+        const key = `${designId}|${colorId}|${sizeId}`;
+        const assignedQty = Math.max(0, Number(assignedByKey.get(key) || 0));
+        assignedByKey.delete(key);
+        if(assignedQty > totalQty){
+          issues.push(`${key}: shared ${totalQty}, assigned ${assignedQty}`);
+          return;
+        }
+        const remaining = totalQty - assignedQty;
+        if(remaining > 0){
+          if(!residual[designId]) residual[designId] = {};
+          if(!residual[designId][colorId]) residual[designId][colorId] = {};
+          residual[designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
+        }
+      });
+    });
+  });
+
+  assignedByKey.forEach((qty, key) => {
+    if(qty > 0) issues.push(`${key}: shared 0, assigned ${qty}`);
+  });
+
+  if(issues.length) return { ok: false, issues };
+  currentInventory[LEGACY_BODY_ID] = residual;
+  return { ok: true, inventory: currentInventory };
+}
+
+async function reconcileBodyAssignmentFromShared(silent = false){
+  if(!masterReady || !masterDocument) return false;
+  const sharedTotal = totalStockAll();
+  const masterTotal = masterInventoryGrandTotal();
+  if(masterTotal === sharedTotal) return true;
+
+  const result = buildReconciledInventoryFromShared();
+  if(!result.ok){
+    if(!silent){
+      alert('自動修復できませんでした。JSONバックアップを保存してください。');
+    }
+    console.error('body assignment reconcile blocked', result.issues);
+    return false;
+  }
+
+  masterDocument = { ...masterDocument, inventory_v2: result.inventory };
+  await saveMasterData({ inventory_v2: result.inventory });
+  return masterInventoryGrandTotal() === totalStockAll();
+}
+
 function unassignedInventoryRows(){
   const rows = [];
   const legacy = masterDocument?.inventory_v2?.[LEGACY_BODY_ID] || {};
@@ -1686,7 +1760,17 @@ function renderBodyAssignment(){
   const totalsMatch = masterInventoryGrandTotal() === totalStockAll();
   renderAssignSummary();
   if(!totalsMatch){
-    box.innerHTML = '<div class="assignment-done"><strong>振り分け停止</strong><span>共有在庫とBody別合計が一致していません。JSONバックアップを保存して確認してください。</span></div>';
+    box.innerHTML = `<div class="assignment-done">
+      <strong>在庫差分を検出</strong>
+      <span>共有在庫を基準に、振り分け済みBodyを残したまま未設定数を再計算できます。</span>
+      <button id="repair-assignment-btn" class="secondary-btn" type="button" style="margin-top:12px;">差分を修復</button>
+    </div>`;
+    document.getElementById('repair-assignment-btn')?.addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      const ok = await reconcileBodyAssignmentFromShared(false);
+      renderBodyAssignment();
+      if(!ok) e.currentTarget.disabled = false;
+    });
     return;
   }
 
@@ -1740,6 +1824,7 @@ function renderBodyAssignment(){
 
       masterDocument = { ...masterDocument, inventory_v2: inventory };
       await saveMasterData({ inventory_v2: inventory });
+      await reconcileBodyAssignmentFromShared(true);
       renderBodyAssignment();
     });
   });
