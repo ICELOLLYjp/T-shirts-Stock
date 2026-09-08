@@ -866,7 +866,7 @@
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp
+  getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -1246,11 +1246,11 @@ async function ensureMasterDocument(){
       masterDocument = snap.data();
       if(Number(masterDocument?.schemaVersion || 0) < SCHEMA_VERSION || !masterDocument?.masters || !masterDocument?.inventory_v2){
         const patch = buildMasterMirrorPatch();
-        await setDoc(masterRef, {
+        await updateDoc(masterRef, {
           ...patch,
           updatedAt: serverTimestamp(),
           migratedAt: serverTimestamp()
-        }, { merge: true });
+        });
         masterDocument = { ...masterDocument, ...patch };
       }
     } else {
@@ -1493,10 +1493,14 @@ function masterDesigns(){
 async function saveMasterData(fields){
   if(!masterReady || !masterDocument) return;
   try {
-    await setDoc(masterRef, {
+    // fields はすべてトップレベルの完全な値として保存する。
+    // updateDoc を使うことで inventory_v2 などの Map 内で削除したキーも
+    // Firestore 側から確実に消える。setDoc + merge だと古いキーが残り、
+    // Body 振り分けのたびに二重計上される原因になる。
+    await updateDoc(masterRef, {
       ...fields,
       updatedAt: serverTimestamp()
-    }, { merge: true });
+    });
     masterDocument = { ...masterDocument, ...fields, updatedAt: nowIso() };
     masterError = null;
     renderMasterUpdated(masterDocument.updatedAt);
@@ -1703,12 +1707,34 @@ function buildReconciledInventoryFromShared(){
   return { ok: true, inventory: currentInventory };
 }
 
+function sameInventoryTree(a, b){
+  const normalizeTree = tree => {
+    const out = {};
+    Object.keys(tree || {}).sort().forEach(designId => {
+      const colors = tree[designId] || {};
+      Object.keys(colors).sort().forEach(colorId => {
+        const sizes = colors[colorId] || {};
+        Object.keys(sizes).sort().forEach(sizeId => {
+          const qty = Math.max(0, Number(sizes[sizeId]?.qty || 0));
+          if(qty <= 0) return;
+          if(!out[designId]) out[designId] = {};
+          if(!out[designId][colorId]) out[designId][colorId] = {};
+          out[designId][colorId][sizeId] = qty;
+        });
+      });
+    });
+    return JSON.stringify(out);
+  };
+  return normalizeTree(a) === normalizeTree(b);
+}
+
 async function reconcileBodyAssignmentFromShared(silent = false){
   if(!masterReady || !masterDocument) return false;
   const sharedTotal = totalStockAll();
   const masterTotal = masterInventoryGrandTotal();
-  if(masterTotal === sharedTotal) return true;
 
+  // 合計が一致していても SKU 単位の「未設定」残数が古い場合があるため、
+  // shared を基準に毎回正規化結果を作る。
   const result = buildReconciledInventoryFromShared();
   if(!result.ok){
     if(!silent){
@@ -1718,6 +1744,11 @@ async function reconcileBodyAssignmentFromShared(silent = false){
     console.error('body assignment reconcile blocked', result.issues);
     return false;
   }
+
+  const beforeLegacy = masterDocument?.inventory_v2?.[LEGACY_BODY_ID] || {};
+  const afterLegacy = result.inventory?.[LEGACY_BODY_ID] || {};
+  const alreadyNormalized = masterTotal === sharedTotal && sameInventoryTree(beforeLegacy, afterLegacy);
+  if(alreadyNormalized) return true;
 
   masterDocument = { ...masterDocument, inventory_v2: result.inventory };
   await saveMasterData({ inventory_v2: result.inventory });
@@ -2165,10 +2196,10 @@ async function saveCloudNow(){
   if(!cloudReady) return;
   setSyncStatus('同期中…');
   try {
-    await setDoc(sharedRef, {
+    await updateDoc(sharedRef, {
       designs: state.designs,
       updatedAt: serverTimestamp()
-    }, { merge: true });
+    });
     sharedDocument = { ...(sharedDocument || {}), designs: state.designs };
     setSyncStatus('共有済み', 'ok');
   } catch(e){
@@ -2180,10 +2211,10 @@ async function saveCloudNow(){
   if(masterReady){
     try {
       const patch = buildMasterMirrorPatch();
-      await setDoc(masterRef, {
+      await updateDoc(masterRef, {
         ...patch,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      });
       masterDocument = { ...(masterDocument || {}), ...patch };
       masterError = null;
       renderSchemaStatus(masterDocument);
