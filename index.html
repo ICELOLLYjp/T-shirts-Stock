@@ -1603,49 +1603,99 @@ function assignedInventoryTotal(){
 function buildReconciledInventoryFromShared(){
   if(!masterDocument) return { ok: false, issues: ['master not ready'] };
 
-  const expectedLegacy = buildV2SchemaFromLegacy(state.designs).inventory_v2?.[LEGACY_BODY_ID] || {};
   const currentInventory = structuredClone(masterDocument.inventory_v2 || {});
-  const assignedByKey = new Map();
+  const masters = masterDocument.masters || {};
+  const designsById = masters.designs || {};
+  const colorsById = masters.colors || {};
+  const sizesById = masters.sizes || {};
   const issues = [];
 
+  const normalize = value => String(value ?? '').trim();
+  const skuKey = (design, color, size) => `${normalize(design)}\u241f${normalize(color)}\u241f${normalize(size)}`;
+
+  const designNameForId = id => normalize(designsById[id]?.legacyKey || designsById[id]?.managementName || '');
+  const colorNameForId = id => normalize(colorsById[id]?.legacyKey || colorsById[id]?.managementName || '');
+  const sizeNameForId = id => normalize(sizesById[id]?.managementName || sizesById[id]?.salesName || String(id).toUpperCase());
+
+  const designIdForName = name => {
+    const target = normalize(name);
+    const found = Object.values(designsById).find(item =>
+      normalize(item?.legacyKey) === target || normalize(item?.managementName) === target
+    );
+    return found?.id || stableId('design', target);
+  };
+  const colorIdForName = name => {
+    const target = normalize(name);
+    const found = Object.values(colorsById).find(item =>
+      normalize(item?.legacyKey) === target || normalize(item?.managementName) === target
+    );
+    return found?.id || stableId('color', target);
+  };
+  const sizeIdForName = name => {
+    const target = normalize(name);
+    const found = Object.values(sizesById).find(item => normalize(item?.managementName) === target || normalize(item?.salesName) === target);
+    return found?.id || target.toLowerCase();
+  };
+
+  // tshirtStock/shared を正解として SKU ごとの総数を作る。
+  const sharedBySku = new Map();
+  Object.entries(state.designs || {}).forEach(([designName, d]) => {
+    ensureStock(designName);
+    (d.colors || []).forEach(colorName => {
+      SIZES.forEach(sizeName => {
+        const qty = Math.max(0, Number(d.stock?.[colorName]?.[sizeName] || 0));
+        if(qty > 0) sharedBySku.set(skuKey(designName, colorName, sizeName), qty);
+      });
+    });
+  });
+
+  // すでに Body に振り分けた数量を、master の ID ではなく legacy 名で照合する。
+  const assignedBySku = new Map();
   Object.entries(currentInventory).forEach(([bodyId, designTree]) => {
     if(bodyId === LEGACY_BODY_ID) return;
     Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+      const designName = designNameForId(designId);
       Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+        const colorName = colorNameForId(colorId);
         Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
           const qty = Math.max(0, Number(cell?.qty || 0));
           if(qty <= 0) return;
-          const key = `${designId}|${colorId}|${sizeId}`;
-          assignedByKey.set(key, (assignedByKey.get(key) || 0) + qty);
+          const sizeName = sizeNameForId(sizeId);
+          if(!designName || !colorName || !sizeName){
+            issues.push(`master ID mapping failed: ${designId}/${colorId}/${sizeId}`);
+            return;
+          }
+          const key = skuKey(designName, colorName, sizeName);
+          assignedBySku.set(key, (assignedBySku.get(key) || 0) + qty);
         });
       });
     });
   });
 
   const residual = {};
-  Object.entries(expectedLegacy).forEach(([designId, colorTree]) => {
-    Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
-      Object.entries(sizeTree || {}).forEach(([sizeId, totalCell]) => {
-        const totalQty = Math.max(0, Number(totalCell?.qty || 0));
-        const key = `${designId}|${colorId}|${sizeId}`;
-        const assignedQty = Math.max(0, Number(assignedByKey.get(key) || 0));
-        assignedByKey.delete(key);
-        if(assignedQty > totalQty){
-          issues.push(`${key}: shared ${totalQty}, assigned ${assignedQty}`);
-          return;
-        }
-        const remaining = totalQty - assignedQty;
-        if(remaining > 0){
-          if(!residual[designId]) residual[designId] = {};
-          if(!residual[designId][colorId]) residual[designId][colorId] = {};
-          residual[designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
-        }
-      });
-    });
+  sharedBySku.forEach((totalQty, key) => {
+    const [designName, colorName, sizeName] = key.split('\u241f');
+    const assignedQty = Math.max(0, Number(assignedBySku.get(key) || 0));
+    assignedBySku.delete(key);
+    if(assignedQty > totalQty){
+      issues.push(`${designName}/${colorName}/${sizeName}: shared ${totalQty}, assigned ${assignedQty}`);
+      return;
+    }
+    const remaining = totalQty - assignedQty;
+    if(remaining <= 0) return;
+    const designId = designIdForName(designName);
+    const colorId = colorIdForName(colorName);
+    const sizeId = sizeIdForName(sizeName);
+    if(!residual[designId]) residual[designId] = {};
+    if(!residual[designId][colorId]) residual[designId][colorId] = {};
+    residual[designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
   });
 
-  assignedByKey.forEach((qty, key) => {
-    if(qty > 0) issues.push(`${key}: shared 0, assigned ${qty}`);
+  assignedBySku.forEach((qty, key) => {
+    if(qty > 0){
+      const [designName, colorName, sizeName] = key.split('\u241f');
+      issues.push(`${designName}/${colorName}/${sizeName}: shared 0, assigned ${qty}`);
+    }
   });
 
   if(issues.length) return { ok: false, issues };
@@ -1662,7 +1712,8 @@ async function reconcileBodyAssignmentFromShared(silent = false){
   const result = buildReconciledInventoryFromShared();
   if(!result.ok){
     if(!silent){
-      alert('自動修復できませんでした。JSONバックアップを保存してください。');
+      const detail = (result.issues || []).slice(0, 5).join('\n');
+      alert(`自動修復できませんでした。\n${detail || '原因を特定できませんでした。'}\nJSONバックアップを保存してください。`);
     }
     console.error('body assignment reconcile blocked', result.issues);
     return false;
@@ -2438,6 +2489,11 @@ async function init(){
     renderCurrentView();
 
     await ensureMasterDocument();
+    // shared の実在庫を基準に、過去の Body 振り分け差分を自動補正する。
+    if(masterReady && masterInventoryGrandTotal() !== totalStockAll()){
+      await reconcileBodyAssignmentFromShared(true);
+      renderCurrentView();
+    }
 
     onSnapshot(sharedRef, (snapshot) => {
       if(!snapshot.exists()) return;
