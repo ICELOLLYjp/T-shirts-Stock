@@ -1505,10 +1505,12 @@ async function saveMasterData(fields){
     masterError = null;
     renderMasterUpdated(masterDocument.updatedAt);
     renderSchemaStatus(masterDocument);
+    return true;
   } catch(error){
     masterError = error;
     console.error('master data save failed', error);
     renderSchemaStatus();
+    return false;
   }
 }
 
@@ -1583,31 +1585,29 @@ async function addBodyMaster(){
 }
 
 
-function masterInventoryBodyTotal(bodyId){
-  const bodyTree = masterDocument?.inventory_v2?.[bodyId] || {};
+function masterInventoryBodyTotal(bodyId, inventorySource = null){
+  const inventory = inventorySource || masterDocument?.inventory_v2 || {};
+  const bodyTree = inventory?.[bodyId] || {};
   let total = 0;
-  Object.values(bodyTree).forEach(colorTree => {
-    Object.values(colorTree || {}).forEach(sizeTree => {
-      Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  Object.values(bodyTree).forEach(designTree => {
+    Object.values(designTree || {}).forEach(colorTree => {
+      Object.values(colorTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
     });
   });
   return total;
 }
 
-function masterInventoryGrandTotal(){
-  return Object.keys(masterDocument?.inventory_v2 || {}).reduce((sum, bodyId) => sum + masterInventoryBodyTotal(bodyId), 0);
-}
-
-function assignedInventoryTotal(){
-  return Object.keys(masterDocument?.inventory_v2 || {})
+function assignedInventoryTotal(inventorySource = null){
+  const inventory = inventorySource || masterDocument?.inventory_v2 || {};
+  return Object.keys(inventory)
     .filter(bodyId => bodyId !== LEGACY_BODY_ID)
-    .reduce((sum, bodyId) => sum + masterInventoryBodyTotal(bodyId), 0);
+    .reduce((sum, bodyId) => sum + masterInventoryBodyTotal(bodyId, inventory), 0);
 }
 
-function buildReconciledInventoryFromShared(){
-  if(!masterDocument) return { ok: false, issues: ['master not ready'] };
+function buildCanonicalInventoryFromShared(inventorySource = null){
+  if(!masterDocument) return { ok: false, issues: ['master not ready'], inventory: {} };
 
-  const currentInventory = structuredClone(masterDocument.inventory_v2 || {});
+  const sourceInventory = structuredClone(inventorySource || masterDocument.inventory_v2 || {});
   const masters = masterDocument.masters || {};
   const designsById = masters.designs || {};
   const colorsById = masters.colors || {};
@@ -1615,47 +1615,73 @@ function buildReconciledInventoryFromShared(){
   const issues = [];
 
   const normalize = value => String(value ?? '').trim();
-  const skuKey = (design, color, size) => `${normalize(design)}\u241f${normalize(color)}\u241f${normalize(size)}`;
+  const normalizedKey = value => normalize(value).toLocaleLowerCase('en-US');
+  const skuKey = (design, color, size) => `${normalizedKey(design)}\u241f${normalizedKey(color)}\u241f${normalizedKey(size)}`;
+
+  const designByName = name => {
+    const key = normalizedKey(name);
+    return Object.values(designsById).find(item =>
+      normalizedKey(item?.legacyKey) === key || normalizedKey(item?.managementName) === key
+    );
+  };
+  const colorByName = name => {
+    const key = normalizedKey(name);
+    return Object.values(colorsById).find(item =>
+      normalizedKey(item?.legacyKey) === key || normalizedKey(item?.managementName) === key
+    );
+  };
+  const sizeByName = name => {
+    const key = normalizedKey(name);
+    return Object.values(sizesById).find(item =>
+      normalizedKey(item?.managementName) === key || normalizedKey(item?.salesName) === key
+    );
+  };
 
   const designNameForId = id => normalize(designsById[id]?.legacyKey || designsById[id]?.managementName || '');
   const colorNameForId = id => normalize(colorsById[id]?.legacyKey || colorsById[id]?.managementName || '');
-  const sizeNameForId = id => normalize(sizesById[id]?.managementName || sizesById[id]?.salesName || String(id).toUpperCase());
+  const sizeNameForId = id => normalize(sizesById[id]?.managementName || sizesById[id]?.salesName || '');
 
-  const designIdForName = name => {
-    const target = normalize(name);
-    const found = Object.values(designsById).find(item =>
-      normalize(item?.legacyKey) === target || normalize(item?.managementName) === target
-    );
-    return found?.id || stableId('design', target);
-  };
-  const colorIdForName = name => {
-    const target = normalize(name);
-    const found = Object.values(colorsById).find(item =>
-      normalize(item?.legacyKey) === target || normalize(item?.managementName) === target
-    );
-    return found?.id || stableId('color', target);
-  };
-  const sizeIdForName = name => {
-    const target = normalize(name);
-    const found = Object.values(sizesById).find(item => normalize(item?.managementName) === target || normalize(item?.salesName) === target);
-    return found?.id || target.toLowerCase();
-  };
-
-  // tshirtStock/shared を正解として SKU ごとの総数を作る。
+  // shared が完成品実在庫の唯一の基準。
   const sharedBySku = new Map();
   Object.entries(state.designs || {}).forEach(([designName, d]) => {
     ensureStock(designName);
+    const designMaster = designByName(designName);
+    if(!designMaster){
+      issues.push(`Design master missing: ${designName}`);
+      return;
+    }
     (d.colors || []).forEach(colorName => {
+      const colorMaster = colorByName(colorName);
+      if(!colorMaster){
+        const hasStock = SIZES.some(sizeName => Math.max(0, Number(d.stock?.[colorName]?.[sizeName] || 0)) > 0);
+        if(hasStock) issues.push(`Color master missing: ${designName}/${colorName}`);
+        return;
+      }
       SIZES.forEach(sizeName => {
         const qty = Math.max(0, Number(d.stock?.[colorName]?.[sizeName] || 0));
-        if(qty > 0) sharedBySku.set(skuKey(designName, colorName, sizeName), qty);
+        if(qty <= 0) return;
+        const sizeMaster = sizeByName(sizeName);
+        if(!sizeMaster){
+          issues.push(`Size master missing: ${sizeName}`);
+          return;
+        }
+        const key = skuKey(designName, colorName, sizeName);
+        sharedBySku.set(key, {
+          qty,
+          designId: designMaster.id,
+          colorId: colorMaster.id,
+          sizeId: sizeMaster.id,
+          designName,
+          colorName,
+          sizeName
+        });
       });
     });
   });
 
-  // すでに Body に振り分けた数量を、master の ID ではなく legacy 名で照合する。
+  // Body振り分け済み数だけを集計する。未設定Bodyの値は信用せず毎回計算する。
   const assignedBySku = new Map();
-  Object.entries(currentInventory).forEach(([bodyId, designTree]) => {
+  Object.entries(sourceInventory).forEach(([bodyId, designTree]) => {
     if(bodyId === LEGACY_BODY_ID) return;
     Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
       const designName = designNameForId(designId);
@@ -1666,7 +1692,7 @@ function buildReconciledInventoryFromShared(){
           if(qty <= 0) return;
           const sizeName = sizeNameForId(sizeId);
           if(!designName || !colorName || !sizeName){
-            issues.push(`master ID mapping failed: ${designId}/${colorId}/${sizeId}`);
+            issues.push(`Body assignment mapping failed: ${designId}/${colorId}/${sizeId}`);
             return;
           }
           const key = skuKey(designName, colorName, sizeName);
@@ -1677,22 +1703,21 @@ function buildReconciledInventoryFromShared(){
   });
 
   const residual = {};
-  sharedBySku.forEach((totalQty, key) => {
-    const [designName, colorName, sizeName] = key.split('\u241f');
+  let assignedValidTotal = 0;
+
+  sharedBySku.forEach((sharedCell, key) => {
     const assignedQty = Math.max(0, Number(assignedBySku.get(key) || 0));
     assignedBySku.delete(key);
-    if(assignedQty > totalQty){
-      issues.push(`${designName}/${colorName}/${sizeName}: shared ${totalQty}, assigned ${assignedQty}`);
+    if(assignedQty > sharedCell.qty){
+      issues.push(`${sharedCell.designName}/${sharedCell.colorName}/${sharedCell.sizeName}: shared ${sharedCell.qty}, assigned ${assignedQty}`);
       return;
     }
-    const remaining = totalQty - assignedQty;
+    assignedValidTotal += assignedQty;
+    const remaining = sharedCell.qty - assignedQty;
     if(remaining <= 0) return;
-    const designId = designIdForName(designName);
-    const colorId = colorIdForName(colorName);
-    const sizeId = sizeIdForName(sizeName);
-    if(!residual[designId]) residual[designId] = {};
-    if(!residual[designId][colorId]) residual[designId][colorId] = {};
-    residual[designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
+    if(!residual[sharedCell.designId]) residual[sharedCell.designId] = {};
+    if(!residual[sharedCell.designId][sharedCell.colorId]) residual[sharedCell.designId][sharedCell.colorId] = {};
+    residual[sharedCell.designId][sharedCell.colorId][sharedCell.sizeId] = { qty: remaining, updatedAt: nowIso() };
   });
 
   assignedBySku.forEach((qty, key) => {
@@ -1702,9 +1727,19 @@ function buildReconciledInventoryFromShared(){
     }
   });
 
-  if(issues.length) return { ok: false, issues };
-  currentInventory[LEGACY_BODY_ID] = residual;
-  return { ok: true, inventory: currentInventory };
+  const canonicalInventory = structuredClone(sourceInventory);
+  canonicalInventory[LEGACY_BODY_ID] = residual;
+  const sharedTotal = totalStockAll();
+  const unassignedTotal = Math.max(0, sharedTotal - assignedValidTotal);
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    inventory: canonicalInventory,
+    sharedTotal,
+    assignedTotal: assignedValidTotal,
+    unassignedTotal
+  };
 }
 
 function sameInventoryTree(a, b){
@@ -1730,16 +1765,11 @@ function sameInventoryTree(a, b){
 
 async function reconcileBodyAssignmentFromShared(silent = false){
   if(!masterReady || !masterDocument) return false;
-  const sharedTotal = totalStockAll();
-  const masterTotal = masterInventoryGrandTotal();
-
-  // 合計が一致していても SKU 単位の「未設定」残数が古い場合があるため、
-  // shared を基準に毎回正規化結果を作る。
-  const result = buildReconciledInventoryFromShared();
+  const result = buildCanonicalInventoryFromShared();
   if(!result.ok){
     if(!silent){
       const detail = (result.issues || []).slice(0, 5).join('\n');
-      alert(`自動修復できませんでした。\n${detail || '原因を特定できませんでした。'}\nJSONバックアップを保存してください。`);
+      alert(`Body振り分けを確認できませんでした。\n${detail || '原因を特定できませんでした。'}\nJSONバックアップを保存してください。`);
     }
     console.error('body assignment reconcile blocked', result.issues);
     return false;
@@ -1747,17 +1777,17 @@ async function reconcileBodyAssignmentFromShared(silent = false){
 
   const beforeLegacy = masterDocument?.inventory_v2?.[LEGACY_BODY_ID] || {};
   const afterLegacy = result.inventory?.[LEGACY_BODY_ID] || {};
-  const alreadyNormalized = masterTotal === sharedTotal && sameInventoryTree(beforeLegacy, afterLegacy);
-  if(alreadyNormalized) return true;
+  if(sameInventoryTree(beforeLegacy, afterLegacy)) return true;
 
   masterDocument = { ...masterDocument, inventory_v2: result.inventory };
-  await saveMasterData({ inventory_v2: result.inventory });
-  return masterInventoryGrandTotal() === totalStockAll();
+  const saved = await saveMasterData({ inventory_v2: result.inventory });
+  return saved !== false;
 }
 
-function unassignedInventoryRows(){
+function unassignedInventoryRows(canonicalResult = null){
   const rows = [];
-  const legacy = masterDocument?.inventory_v2?.[LEGACY_BODY_ID] || {};
+  const result = canonicalResult || buildCanonicalInventoryFromShared();
+  const legacy = result?.inventory?.[LEGACY_BODY_ID] || {};
   const designsById = masterDocument?.masters?.designs || {};
   const colorsById = masterDocument?.masters?.colors || {};
   const sizesById = masterDocument?.masters?.sizes || {};
@@ -1792,27 +1822,29 @@ function unassignedInventoryRows(){
   });
 }
 
-function renderAssignSummary(){
+function renderAssignSummary(canonicalResult = null){
   const box = document.getElementById('assign-summary');
   if(!box) return;
   if(!masterReady || !masterDocument){
     box.innerHTML = '';
     return;
   }
-  const unassigned = masterInventoryBodyTotal(LEGACY_BODY_ID);
-  const assigned = assignedInventoryTotal();
-  const masterTotal = unassigned + assigned;
+  const result = canonicalResult || buildCanonicalInventoryFromShared();
   const sharedTotal = totalStockAll();
-  const progress = masterTotal > 0 ? Math.min(100, Math.max(0, assigned / masterTotal * 100)) : 100;
-  const mismatch = masterTotal !== sharedTotal;
+  const assigned = result?.assignedTotal ?? assignedInventoryTotal();
+  const unassigned = result?.unassignedTotal ?? Math.max(0, sharedTotal - assigned);
+  const progress = sharedTotal > 0 ? Math.min(100, Math.max(0, assigned / sharedTotal * 100)) : 100;
+  const issueText = !result?.ok && result?.issues?.length
+    ? `<div class="assign-warning">Body振り分け済み数量に確認が必要です。${escapeHtml(result.issues[0])}</div>`
+    : '';
   box.innerHTML = `<div class="assign-summary">
     <div class="assign-summary-grid">
       <div class="assign-stat"><span class="assign-stat-label">未設定</span><span class="assign-stat-value">${unassigned}</span></div>
       <div class="assign-stat"><span class="assign-stat-label">振分済</span><span class="assign-stat-value">${assigned}</span></div>
-      <div class="assign-stat"><span class="assign-stat-label">合計</span><span class="assign-stat-value">${masterTotal}</span></div>
+      <div class="assign-stat"><span class="assign-stat-label">合計</span><span class="assign-stat-value">${sharedTotal}</span></div>
     </div>
     <div class="assign-progress"><div class="assign-progress-bar" style="width:${progress.toFixed(1)}%"></div></div>
-    ${mismatch ? `<div class="assign-warning">共有在庫 ${sharedTotal} 枚とBody別合計 ${masterTotal} 枚が一致していません。振り分けを止めてJSONバックアップを保存してください。</div>` : ''}
+    ${issueText}
   </div>`;
 }
 
@@ -1831,7 +1863,7 @@ function renderBodyAssignment(){
   const targetBodies = masterBodies().filter(body => body.id !== LEGACY_BODY_ID);
   if(!targetBodies.length){
     select.innerHTML = '<option value="">Bodyを登録してください</option>';
-    box.innerHTML = '<div class="production-empty">先にBody設定からOrganic、Vintage、MIJなどのBodyを登録してください。</div>';
+    box.innerHTML = '<div class="production-empty">先にBody設定からBodyを登録してください。</div>';
     renderAssignSummary();
     return;
   }
@@ -1839,24 +1871,15 @@ function renderBodyAssignment(){
   if(!targetBodies.some(body => body.id === state.assignBodyId)) state.assignBodyId = targetBodies[0].id;
   select.innerHTML = targetBodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.assignBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
 
-  const totalsMatch = masterInventoryGrandTotal() === totalStockAll();
-  renderAssignSummary();
-  if(!totalsMatch){
-    box.innerHTML = `<div class="assignment-done">
-      <strong>在庫差分を検出</strong>
-      <span>共有在庫を基準に、振り分け済みBodyを残したまま未設定数を再計算できます。</span>
-      <button id="repair-assignment-btn" class="secondary-btn" type="button" style="margin-top:12px;">差分を修復</button>
-    </div>`;
-    document.getElementById('repair-assignment-btn')?.addEventListener('click', async (e) => {
-      e.currentTarget.disabled = true;
-      const ok = await reconcileBodyAssignmentFromShared(false);
-      renderBodyAssignment();
-      if(!ok) e.currentTarget.disabled = false;
-    });
+  const canonical = buildCanonicalInventoryFromShared();
+  renderAssignSummary(canonical);
+  if(!canonical.ok){
+    const details = canonical.issues.slice(0, 5).map(x => escapeHtml(x)).join('<br>');
+    box.innerHTML = `<div class="assignment-done"><strong>振り分け確認が必要</strong><span>${details}</span></div>`;
     return;
   }
 
-  const rows = unassignedInventoryRows();
+  const rows = unassignedInventoryRows(canonical);
   if(!rows.length){
     box.innerHTML = '<div class="assignment-done"><strong>振り分け完了</strong><span>未設定Bodyの完成品在庫は0枚です。</span></div>';
     return;
@@ -1880,33 +1903,35 @@ function renderBodyAssignment(){
       const key = btn.getAttribute('data-assign-move');
       const [designId, colorId, sizeId] = key.split('|');
       const input = box.querySelector(`input[data-assign-qty="${CSS.escape(key)}"]`);
-      const currentQty = Math.max(0, Number(masterDocument?.inventory_v2?.[LEGACY_BODY_ID]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
+      const currentCanonical = buildCanonicalInventoryFromShared();
+      if(!currentCanonical.ok) return;
+      const currentQty = Math.max(0, Number(currentCanonical.inventory?.[LEGACY_BODY_ID]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
       const moveQty = Math.max(0, Math.min(currentQty, parseInt(input?.value, 10) || 0));
       const targetBodyId = state.assignBodyId;
       if(!targetBodyId || targetBodyId === LEGACY_BODY_ID || moveQty <= 0 || currentQty <= 0) return;
 
       btn.disabled = true;
-      const inventory = structuredClone(masterDocument.inventory_v2 || {});
-      if(!inventory[LEGACY_BODY_ID]) inventory[LEGACY_BODY_ID] = {};
+      const inventory = structuredClone(currentCanonical.inventory || {});
       if(!inventory[targetBodyId]) inventory[targetBodyId] = {};
-
       if(!inventory[targetBodyId][designId]) inventory[targetBodyId][designId] = {};
       if(!inventory[targetBodyId][designId][colorId]) inventory[targetBodyId][designId][colorId] = {};
       const targetBefore = Math.max(0, Number(inventory[targetBodyId]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
       inventory[targetBodyId][designId][colorId][sizeId] = { qty: targetBefore + moveQty, updatedAt: nowIso() };
 
-      const remaining = currentQty - moveQty;
-      if(remaining > 0){
-        inventory[LEGACY_BODY_ID][designId][colorId][sizeId] = { qty: remaining, updatedAt: nowIso() };
-      } else {
-        delete inventory[LEGACY_BODY_ID][designId][colorId][sizeId];
-        if(!Object.keys(inventory[LEGACY_BODY_ID][designId][colorId]).length) delete inventory[LEGACY_BODY_ID][designId][colorId];
-        if(!Object.keys(inventory[LEGACY_BODY_ID][designId]).length) delete inventory[LEGACY_BODY_ID][designId];
+      // 未設定Bodyは直接引き算せず、shared から Body振分済み数を引いて再生成する。
+      const after = buildCanonicalInventoryFromShared(inventory);
+      if(!after.ok){
+        btn.disabled = false;
+        alert(`Body振り分けを保存できませんでした。\n${(after.issues || []).slice(0, 3).join('\n')}`);
+        return;
       }
 
-      masterDocument = { ...masterDocument, inventory_v2: inventory };
-      await saveMasterData({ inventory_v2: inventory });
-      await reconcileBodyAssignmentFromShared(true);
+      masterDocument = { ...masterDocument, inventory_v2: after.inventory };
+      const saved = await saveMasterData({ inventory_v2: after.inventory });
+      if(saved === false){
+        btn.disabled = false;
+        return;
+      }
       renderBodyAssignment();
     });
   });
@@ -2520,8 +2545,8 @@ async function init(){
     renderCurrentView();
 
     await ensureMasterDocument();
-    // shared の実在庫を基準に、過去の Body 振り分け差分を自動補正する。
-    if(masterReady && masterInventoryGrandTotal() !== totalStockAll()){
+    // shared を基準に未設定Bodyを毎回再生成する。
+    if(masterReady){
       await reconcileBodyAssignmentFromShared(true);
       renderCurrentView();
     }
