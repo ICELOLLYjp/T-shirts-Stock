@@ -805,6 +805,40 @@
   }
   .task-qty-control .mini-qty-btn { width: 36px; height: 38px; }
   .task-qty-input { text-align: center; font-weight: 700; }
+  .task-size-entry-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .task-size-entry {
+    padding: 9px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+  }
+  .task-size-entry-name {
+    margin-bottom: 5px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .task-size-entry-capacity {
+    min-height: 28px;
+    margin-bottom: 6px;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.35;
+    color: var(--text-secondary);
+  }
+  .task-size-entry .task-qty-control {
+    grid-template-columns: 32px minmax(42px, 1fr) 32px;
+    gap: 4px;
+  }
+  .task-size-entry .task-qty-control .mini-qty-btn {
+    width: 32px;
+    height: 36px;
+  }
+  .task-size-entry .task-qty-input { height: 36px; padding: 0 4px; }
   .task-add-btn,
   .task-complete-btn {
     width: 100%;
@@ -1240,6 +1274,7 @@
     .task-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .task-add-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .task-add-grid .task-field-wide { grid-column: auto; }
+    .task-size-entry-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .task-card-controls { grid-template-columns: minmax(260px, 1fr) 140px; }
   }
 
@@ -1333,11 +1368,11 @@
 
 <div id="color-settings-panel" class="color-settings-panel" hidden>
   <div class="section-title">Colorマスター</div>
-  <div class="section-note">ColorごとのBody設定を正解として扱います。完成品在庫のBodyはこの設定に合わせて自動整理し、完成品と未プリント在庫も自動的に絞り込みます。</div>
+  <div class="section-note">Colorごとに標準Bodyを設定できます。これは入力時の初期値として使いますが、BodyとColorの組み合わせ自体は自由です。</div>
   <div id="color-mapping-warning"></div>
-  <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>Body</span></div>
+  <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>標準Body</span></div>
   <div id="color-master-list"></div>
-  <div class="color-mapping-note">完成品在庫はColorマスターのBody設定を基準に自動整理します。Body振り分けを在庫ごとに行う必要はありません。</div>
+  <div class="color-mapping-note">標準Bodyは入力補助です。必要に応じて、どのBodyにも任意のColorを組み合わせて在庫・制作タスクを登録できます。</div>
 </div>
 
 <section id="view-finished" class="view-panel">
@@ -1350,8 +1385,8 @@
       </div>
       <div id="finished-body-total" class="finished-body-total"></div>
     </div>
-    <div class="master-sync-note">Colorマスターで決まったBodyの在庫を tshirtStock/master に保存し、全Body合計を tshirtStock/shared へ自動同期します。</div>
-    <div class="finished-filter-note">選択したBodyに紐づくColorだけを表示します。</div>
+    <div class="master-sync-note">Body別の完成品在庫を tshirtStock/master に保存し、全Body合計を tshirtStock/shared へ自動同期します。</div>
+    <div class="finished-filter-note">選択したBodyの完成品在庫を表示します。Colorの標準Bodyとは別の組み合わせも保持できます。</div>
   </div>
   <div class="sort-row">
     <span class="sort-label">並び替え</span>
@@ -1390,7 +1425,7 @@
 
 <section id="view-blank" class="view-panel" hidden>
   <div class="section-title">未プリントボディ</div>
-  <div class="section-note">まだプリントしていないTシャツの在庫です。Colorマスターの設定を優先し、ColorからBodyを自動判定します。</div>
+  <div class="section-note">まだプリントしていないTシャツの在庫です。Bodyを選び、任意のColor・Sizeを自由に組み合わせて管理します。</div>
   <div class="master-select-row">
     <label class="field-label" for="blank-body-select">Body</label>
     <select id="blank-body-select" class="master-select"></select>
@@ -1408,7 +1443,7 @@
 
 <section id="view-plan" class="view-panel" hidden>
   <div class="section-title">制作タスク</div>
-  <div class="section-note">制作するTシャツをタスク登録します。自社制作は未プリントBodyとシート在庫から制作可能枚数を自動計算し、完了時に資材を減らして完成品在庫を増やします。外注は資材在庫を減らしません。</div>
+  <div class="section-note">Design・Body・Color・Sizeを自由に組み合わせてタスク登録します。自社制作は未プリントBodyとシート在庫から制作可能枚数を自動計算し、完了時に資材を減らして完成品在庫を増やします。外注は資材在庫を減らしません。</div>
   <div id="production-summary"></div>
   <div id="task-order-list"></div>
   <div id="task-add-area"></div>
@@ -2299,10 +2334,8 @@ function renderColorSettings(){
   const bodies = assignableBodies();
   const colors = masterColors();
   const stats = colorMappingStats();
-  if(stats.ambiguous > 0){
-    warning.innerHTML = `<div class="color-mapping-warning">${stats.ambiguous}色は複数Bodyに在庫があります。Body設定済みのColorは自動的に正しいBodyへ整理します。</div>`;
-  } else if(stats.unmapped > 0){
-    warning.innerHTML = `<div class="color-mapping-warning">Body未設定のColorが${stats.unmapped}色あります。</div>`;
+  if(stats.unmapped > 0){
+    warning.innerHTML = `<div class="color-mapping-warning">標準Body未設定のColorが${stats.unmapped}色あります。未設定でもBodyとColorは自由に組み合わせられます。</div>`;
   } else {
     warning.innerHTML = '';
   }
@@ -2341,50 +2374,16 @@ function renderColorSettings(){
       const colorsMap = { ...(masterDocument.masters?.colors || {}) };
       if(!colorsMap[id]) return;
 
-      const usage = colorUsageBodyIds(id);
-      const conflictingUsage = usage.filter(bodyId => nextBodyId && bodyId !== nextBodyId);
-      let inventory = structuredClone(masterDocument.inventory_v2 || {});
-
-      if(conflictingUsage.length){
-        const colorName = colorsMap[id]?.managementName || 'このColor';
-        const bodyName = (masterDocument.masters?.bodies || {})[nextBodyId]?.managementName || '選択Body';
-        const sourceNames = conflictingUsage.map(bodyId => (masterDocument.masters?.bodies || {})[bodyId]?.managementName || bodyId).join('、');
-        const ok = confirm(`${colorName} は現在 ${sourceNames} に完成品在庫があります。\n${colorName} の完成品在庫をすべて ${bodyName} に移動して、ColorのBodyを ${bodyName} に確定しますか？\n在庫合計は変わりません。`);
-        if(!ok){
-          renderColorSettings();
-          return;
-        }
-
-        if(!inventory[nextBodyId]) inventory[nextBodyId] = {};
-        Object.entries(inventory).forEach(([bodyId, designTree]) => {
-          if(bodyId === LEGACY_BODY_ID || bodyId === nextBodyId) return;
-          Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
-            const sourceSizeTree = colorTree?.[id];
-            if(!sourceSizeTree) return;
-            if(!inventory[nextBodyId][designId]) inventory[nextBodyId][designId] = {};
-            if(!inventory[nextBodyId][designId][id]) inventory[nextBodyId][designId][id] = {};
-            Object.entries(sourceSizeTree || {}).forEach(([sizeId, cell]) => {
-              const qty = Math.max(0, Number(cell?.qty || 0));
-              if(qty <= 0) return;
-              const before = Math.max(0, Number(inventory[nextBodyId]?.[designId]?.[id]?.[sizeId]?.qty || 0));
-              inventory[nextBodyId][designId][id][sizeId] = { qty: before + qty, updatedAt: nowIso() };
-            });
-            delete inventory[bodyId][designId][id];
-            if(!Object.keys(inventory[bodyId][designId] || {}).length) delete inventory[bodyId][designId];
-          });
-        });
-      }
-
+      // ColorのBodyは「標準Body」として保存するだけ。
+      // 既存の完成品・未プリント在庫は移動せず、Body×Colorの自由な組み合わせを保持する。
       colorsMap[id] = { ...colorsMap[id], bodyId: nextBodyId || '', updatedAt: nowIso() };
       const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
-      masterDocument = { ...masterDocument, masters, inventory_v2: inventory };
-      const saved = await saveMasterData({ masters, inventory_v2: inventory });
+      masterDocument = { ...masterDocument, masters };
+      const saved = await saveMasterData({ masters });
       if(saved === false){
         renderColorSettings();
         return;
       }
-      if(inventoryAuthorityActive()) await syncSharedFromMaster();
-      await normalizeBlankInventoryByColorMaster();
       renderCurrentView();
       renderColorSettings();
     });
@@ -3232,14 +3231,16 @@ function setNestedQty(root, bodyId, colorId, sizeId, qty){
 }
 
 async function saveBlankQty(bodyId, colorId, sizeId, qty){
-  const resolvedBodyId = bodyIdForColor(colorId, bodyId);
+  const resolvedBodyId = bodyId || '';
+  if(!resolvedBodyId) return false;
   const next = setNestedQty(masterDocument?.blank_stock || {}, resolvedBodyId, colorId, sizeId, qty);
   masterDocument = { ...masterDocument, blank_stock: next };
   return await saveMasterData({ blank_stock: next });
 }
 
 async function saveBlankOrderQty(bodyId, colorId, sizeId, qty){
-  const resolvedBodyId = bodyIdForColor(colorId, bodyId);
+  const resolvedBodyId = bodyId || '';
+  if(!resolvedBodyId) return false;
   const next = setNestedQty(masterDocument?.blank_orders || {}, resolvedBodyId, colorId, sizeId, qty);
   masterDocument = { ...masterDocument, blank_orders: next };
   return await saveMasterData({ blank_orders: next });
@@ -3261,14 +3262,8 @@ function renderBlankStock(){
   }
   select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.blankBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
 
-  const colors = masterColors().filter(color => {
-    if(!state.blankBodyId) return false;
-    if(color.bodyId) return color.bodyId === state.blankBodyId;
-    // Body未設定Colorだけは、既存データがあるBodyで一時表示する。
-    const existingStock = masterDocument?.blank_stock?.[state.blankBodyId]?.[color.id] || {};
-    const existingOrder = masterDocument?.blank_orders?.[state.blankBodyId]?.[color.id] || {};
-    return [...Object.values(existingStock), ...Object.values(existingOrder)].some(cell => Math.max(0, Number(cell?.qty || 0)) > 0);
-  });
+  // Body×Colorは自由な組み合わせ。選択Bodyでは全Colorを表示する。
+  const colors = masterColors();
   const sizes = masterSizes();
   const bodyStock = masterDocument.blank_stock?.[state.blankBodyId] || {};
   const bodyOrders = masterDocument.blank_orders?.[state.blankBodyId] || {};
@@ -3281,7 +3276,7 @@ function renderBlankStock(){
             const stockTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0)), 0);
             const orderTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0)), 0);
             return `<tr>
-              <td>${escapeHtml(color.managementName)}<div class="color-body-hint">${escapeHtml((masterDocument.masters?.bodies || {})[color.bodyId]?.managementName || 'Body未設定')}</div></td>
+              <td>${escapeHtml(color.managementName)}<div class="color-body-hint">標準: ${escapeHtml((masterDocument.masters?.bodies || {})[color.bodyId]?.managementName || '未設定')}</div></td>
               ${sizes.map(size => {
                 const stock = Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0));
                 const order = Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0));
@@ -3429,7 +3424,7 @@ function productionTaskRows(){
     .filter(task => Math.max(0, Number(task?.qty || 0)) > 0)
     .map(task => {
       const color = colors[task.colorId] || {};
-      const bodyId = color.bodyId || task.bodyId || '';
+      const bodyId = task.bodyId || color.bodyId || '';
       return {
         ...task,
         qty: Math.max(0, Number(task.qty || 0)),
@@ -3471,7 +3466,8 @@ function buildTasksFromLegacyPlan(){
   combined.forEach((qty, key) => {
     const [designId, colorId, sizeId] = key.split('|');
     const id = taskId();
-    tasks[id] = { id, designId, colorId, sizeId, qty, method: 'inhouse', createdAt: nowIso(), updatedAt: nowIso() };
+    const bodyId = masterDocument?.masters?.colors?.[colorId]?.bodyId || '';
+    tasks[id] = { id, designId, colorId, sizeId, bodyId, qty, method: 'inhouse', createdAt: nowIso(), updatedAt: nowIso() };
   });
   return tasks;
 }
@@ -3607,18 +3603,51 @@ async function saveProductionTasks(tasks){
   return await saveMasterData({ production_tasks: tasks, productionTasksVersion: 1 });
 }
 
-async function addProductionTask(designId, colorId, sizeId, qty, method){
+async function addProductionTask(designId, bodyId, colorId, sizeId, qty, method){
   qty = Math.max(0, parseInt(qty,10) || 0);
-  if(!designId || !colorId || !sizeId || qty <= 0) return false;
+  if(!designId || !bodyId || !colorId || !sizeId || qty <= 0) return false;
   const tasks = structuredClone(productionTasks());
   const normalizedMethod = method === 'outsourced' ? 'outsourced' : 'inhouse';
-  const existing = Object.values(tasks).find(t => t.designId === designId && t.colorId === colorId && t.sizeId === sizeId && (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod);
+  const existing = Object.values(tasks).find(t =>
+    t.designId === designId &&
+    (t.bodyId || masterDocument?.masters?.colors?.[t.colorId]?.bodyId || '') === bodyId &&
+    t.colorId === colorId &&
+    t.sizeId === sizeId &&
+    (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod
+  );
   if(existing){
-    tasks[existing.id] = { ...existing, qty: Math.max(0, Number(existing.qty || 0)) + qty, updatedAt: nowIso() };
+    tasks[existing.id] = { ...existing, bodyId, qty: Math.max(0, Number(existing.qty || 0)) + qty, updatedAt: nowIso() };
   } else {
     const id = taskId();
-    tasks[id] = { id, designId, colorId, sizeId, qty, method: normalizedMethod, createdAt: nowIso(), updatedAt: nowIso() };
+    tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, createdAt: nowIso(), updatedAt: nowIso() };
   }
+  return await saveProductionTasks(tasks);
+}
+
+async function addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, method){
+  if(!designId || !bodyId || !colorId) return false;
+  const tasks = structuredClone(productionTasks());
+  const normalizedMethod = method === 'outsourced' ? 'outsourced' : 'inhouse';
+  let added = 0;
+  Object.entries(sizeQtyMap || {}).forEach(([sizeId, rawQty]) => {
+    const qty = Math.max(0, parseInt(rawQty, 10) || 0);
+    if(!sizeId || qty <= 0) return;
+    const existing = Object.values(tasks).find(t =>
+      t.designId === designId &&
+      (t.bodyId || masterDocument?.masters?.colors?.[t.colorId]?.bodyId || '') === bodyId &&
+      t.colorId === colorId &&
+      t.sizeId === sizeId &&
+      (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod
+    );
+    if(existing){
+      tasks[existing.id] = { ...existing, bodyId, qty: Math.max(0, Number(existing.qty || 0)) + qty, updatedAt: nowIso() };
+    } else {
+      const id = taskId();
+      tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, createdAt: nowIso(), updatedAt: nowIso() };
+    }
+    added += qty;
+  });
+  if(added <= 0) return false;
   return await saveProductionTasks(tasks);
 }
 
@@ -3646,7 +3675,7 @@ async function completeProductionTask(taskIdValue){
   const task = productionTaskRows().find(x => x.id === taskIdValue);
   if(!task || task.qty <= 0) return false;
   if(!task.bodyId){
-    alert('このColorのBodyが未設定です。先にColor設定でBodyを指定してください。');
+    alert('この制作タスクのBodyが未設定です。タスクを作り直してBodyを選択してください。');
     return false;
   }
   const inhouse = task.method === 'inhouse';
@@ -3717,59 +3746,100 @@ function renderProductionTasks(){
   </div>`;
 
   const designs = masterDesigns();
-  const colors = masterColors().filter(c => c.bodyId);
+  const colors = masterColors();
+  const bodies = assignableBodies();
   const sizes = masterSizes();
   const defaultDesign = designs[0]?.id || '';
   const defaultColor = colors[0]?.id || '';
-  const defaultSize = sizes[0]?.id || '';
+  const defaultBody = masterDocument?.masters?.colors?.[defaultColor]?.bodyId || bodies[0]?.id || '';
   addBox.innerHTML = `<div class="task-add-card"><div class="task-add-title">タスクを追加</div><div class="task-add-grid">
     <div><label class="field-label">Design</label><select id="task-add-design">${designs.map(x=>`<option value="${escapeHtml(x.id)}">${x.starred?'★ ':''}${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
     <div><label class="field-label">Color</label><select id="task-add-color">${colors.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
-    <div><label class="field-label">Size</label><select id="task-add-size">${sizes.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
+    <div><label class="field-label">Body</label><select id="task-add-body-select">${bodies.map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===defaultBody?'selected':''}>${escapeHtml(x.managementName || x.id)}</option>`).join('')}</select></div>
     <div><label class="field-label">制作方法</label><select id="task-add-method"><option value="inhouse">自社制作</option><option value="outsourced">外注</option></select></div>
-    <div class="task-field-wide"><label class="field-label">Body</label><div id="task-add-body" class="task-form-body"></div></div>
-    <div class="task-field-wide"><label class="field-label">制作可能</label><div id="task-add-capacity" class="task-form-body"></div></div>
-    <div class="task-field-wide"><label class="field-label">数量</label><div class="task-qty-control"><button id="task-add-minus" class="mini-qty-btn" type="button">−</button><input id="task-add-qty" class="task-qty-input" type="number" min="1" inputmode="numeric" value="1"><button id="task-add-plus" class="mini-qty-btn" type="button">＋</button></div></div>
-    <div class="task-field-wide"><button id="task-add-btn" class="task-add-btn" type="button">タスク追加</button></div>
+    <div class="task-field-wide" style="grid-column:1/-1;"><label class="field-label">Size・数量</label><div class="task-size-entry-grid">${sizes.map(size => `
+      <div class="task-size-entry">
+        <div class="task-size-entry-name">${escapeHtml(size.managementName)}</div>
+        <div class="task-size-entry-capacity" data-task-capacity-size="${escapeHtml(size.id)}"></div>
+        <div class="task-qty-control">
+          <button class="mini-qty-btn" type="button" data-task-add-delta="-1" data-task-add-size="${escapeHtml(size.id)}">−</button>
+          <input class="task-qty-input" type="number" min="0" inputmode="numeric" value="0" data-task-add-qty="${escapeHtml(size.id)}">
+          <button class="mini-qty-btn" type="button" data-task-add-delta="1" data-task-add-size="${escapeHtml(size.id)}">＋</button>
+        </div>
+      </div>`).join('')}</div></div>
+    <div class="task-field-wide" style="grid-column:1/-1;"><div id="task-add-capacity" class="task-form-body"></div></div>
+    <div class="task-field-wide" style="grid-column:1/-1;"><button id="task-add-btn" class="task-add-btn" type="button">タスク追加</button></div>
   </div></div>`;
 
   const colorSelect = document.getElementById('task-add-color');
   const designSelect = document.getElementById('task-add-design');
-  const sizeSelect = document.getElementById('task-add-size');
   const methodSelect = document.getElementById('task-add-method');
-  const bodyLabel = document.getElementById('task-add-body');
+  const bodySelect = document.getElementById('task-add-body-select');
   const capacityLabel = document.getElementById('task-add-capacity');
+  let bodyManuallySelected = false;
   const refreshResource = () => {
     const colorId = colorSelect?.value || defaultColor;
     const designId = designSelect?.value || defaultDesign;
-    const sizeId = sizeSelect?.value || defaultSize;
-    const bodyId = masterDocument?.masters?.colors?.[colorId]?.bodyId || '';
-    bodyLabel.textContent = masterDocument?.masters?.bodies?.[bodyId]?.managementName || 'Body未設定';
-    if(methodSelect?.value === 'outsourced'){
-      capacityLabel.textContent = '外注はBody・シート在庫を使用しません';
-      return;
-    }
-    const bodyQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+    const bodyId = bodySelect?.value || defaultBody;
+    const outsourced = methodSelect?.value === 'outsourced';
     const sheetQty = Math.max(0, Number(masterDocument?.print_sheets?.[designId]?.qty || 0));
-    capacityLabel.textContent = `Body ${bodyQty}枚 / シート ${sheetQty}枚 / 制作可能 ${Math.min(bodyQty, sheetQty)}枚`;
+    sizes.forEach(size => {
+      const el = addBox.querySelector(`[data-task-capacity-size="${CSS.escape(size.id)}"]`);
+      if(!el) return;
+      if(outsourced){
+        el.textContent = '外注';
+      } else {
+        const bodyQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[size.id]?.qty || 0));
+        el.textContent = `Body ${bodyQty} / 制作可 ${Math.min(bodyQty, sheetQty)}`;
+      }
+    });
+    capacityLabel.textContent = outsourced
+      ? '外注はBody・シート在庫を使用しません'
+      : `シート在庫 ${sheetQty}枚。各サイズのBody在庫と照合して制作可能数を表示しています。`;
   };
   refreshResource();
-  colorSelect?.addEventListener('change', refreshResource);
+  colorSelect?.addEventListener('change', () => {
+    if(!bodyManuallySelected){
+      const suggested = masterDocument?.masters?.colors?.[colorSelect.value]?.bodyId || '';
+      if(suggested && bodies.some(b => b.id === suggested)) bodySelect.value = suggested;
+    }
+    refreshResource();
+  });
+  bodySelect?.addEventListener('change', () => { bodyManuallySelected = true; refreshResource(); });
   designSelect?.addEventListener('change', refreshResource);
-  sizeSelect?.addEventListener('change', refreshResource);
   methodSelect?.addEventListener('change', refreshResource);
-  const qtyInput = document.getElementById('task-add-qty');
-  document.getElementById('task-add-minus')?.addEventListener('click', () => qtyInput.value = Math.max(1, (parseInt(qtyInput.value,10)||1)-1));
-  document.getElementById('task-add-plus')?.addEventListener('click', () => qtyInput.value = Math.max(1, (parseInt(qtyInput.value,10)||1)+1));
+
+  addBox.querySelectorAll('button[data-task-add-delta]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sizeId = btn.getAttribute('data-task-add-size');
+      const input = addBox.querySelector(`input[data-task-add-qty="${CSS.escape(sizeId)}"]`);
+      if(!input) return;
+      const delta = parseInt(btn.getAttribute('data-task-add-delta'), 10) || 0;
+      input.value = Math.max(0, (parseInt(input.value, 10) || 0) + delta);
+    });
+  });
+
   document.getElementById('task-add-btn')?.addEventListener('click', async btnEvent => {
     const designId = document.getElementById('task-add-design')?.value || defaultDesign;
     const colorId = colorSelect?.value || defaultColor;
-    const sizeId = document.getElementById('task-add-size')?.value || defaultSize;
+    const bodyId = bodySelect?.value || defaultBody;
     const method = document.getElementById('task-add-method')?.value || 'inhouse';
-    const qty = Math.max(0, parseInt(qtyInput?.value,10)||0);
-    if(!masterDocument?.masters?.colors?.[colorId]?.bodyId){ alert('このColorのBodyが未設定です。先にColor設定でBodyを指定してください。'); return; }
+    if(!bodyId){
+      alert('Bodyを選択してください。');
+      return;
+    }
+    const sizeQtyMap = {};
+    addBox.querySelectorAll('input[data-task-add-qty]').forEach(input => {
+      const sizeId = input.getAttribute('data-task-add-qty');
+      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      if(qty > 0) sizeQtyMap[sizeId] = qty;
+    });
+    if(!Object.keys(sizeQtyMap).length){
+      alert('制作するサイズの数量を入力してください。');
+      return;
+    }
     btnEvent.currentTarget.disabled = true;
-    await addProductionTask(designId,colorId,sizeId,qty,method);
+    await addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, method);
     renderProductionTasks();
   });
 
@@ -4380,8 +4450,7 @@ async function init(){
       if(inventoryAuthorityActive()){
         await ensureKnownColorMappings();
         await inferColorBodyMappings();
-        await normalizeFinishedInventoryByColorMaster();
-        await normalizeBlankInventoryByColorMaster();
+        // ColorのBody設定は標準値として利用し、既存在庫のBody×Colorは自動移動しない。
         await ensureProductionTasks();
         await syncSharedFromMaster();
       }
@@ -4433,8 +4502,7 @@ async function init(){
         renderMasterUpdated(masterDocument?.updatedAt || masterDocument?.migratedAt);
         if(inventoryAuthorityActive()) setTimeout(async () => {
           await ensureKnownColorMappings();
-          await normalizeFinishedInventoryByColorMaster();
-          await normalizeBlankInventoryByColorMaster();
+          // ColorのBody設定は標準値として利用し、既存在庫のBody×Colorは自動移動しない。
           await ensureProductionTasks();
           await syncSharedFromMaster();
         }, 20);
