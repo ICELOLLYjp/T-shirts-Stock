@@ -1300,7 +1300,7 @@ const STORAGE_KEY = 'tshirt-stock-by-design';
 const UI_STORAGE_KEY = 'tshirt-stock-ui';
 const PRE_V2_BACKUP_KEY = 'tshirt-stock-pre-v2-backup';
 const SCHEMA_VERSION = 2;
-const APP_PATCH_VERSION = '20260909-blank-classification';
+const APP_PATCH_VERSION = '20260909-design-add-fix';
 const LEGACY_BODY_ID = 'body_unassigned';
 let cloudReady = false;
 let sharedDocument = null;
@@ -2442,6 +2442,24 @@ function stockFingerprint(designs){
   return rows.join('\u241e');
 }
 
+function sharedDesignFingerprint(designs){
+  const rows = [];
+  Object.keys(designs || {}).sort((a,b) => a.localeCompare(b, 'ja')).forEach(designName => {
+    const d = designs[designName] || {};
+    rows.push(`D\u241f${designName}\u241f${d.starred ? 1 : 0}`);
+
+    const colors = Array.from(new Set(d.colors || [])).sort((a,b) => a.localeCompare(b, 'ja'));
+    colors.forEach(colorName => {
+      rows.push(`C\u241f${designName}\u241f${colorName}`);
+      SIZES.forEach(sizeName => {
+        const qty = Math.max(0, Number(d.stock?.[colorName]?.[sizeName] || 0));
+        rows.push(`S\u241f${designName}\u241f${colorName}\u241f${sizeName}\u241f${qty}`);
+      });
+    });
+  });
+  return rows.join('\u241e');
+}
+
 
 function buildLegacyProductionPlanFromState(){
   const plan = {};
@@ -2476,8 +2494,9 @@ async function syncProductionPlanToMaster(){
 async function syncSharedFromMaster(){
   if(!inventoryAuthorityActive() || !cloudReady) return false;
   const next = buildSharedDesignsFromMaster();
-  const currentFingerprint = stockFingerprint(sharedDocument?.designs || state.designs || {});
-  const nextFingerprint = stockFingerprint(next);
+  // 在庫数だけでなく、在庫0の新規Design / Colorも同期対象にする。
+  const currentFingerprint = sharedDesignFingerprint(sharedDocument?.designs || state.designs || {});
+  const nextFingerprint = sharedDesignFingerprint(next);
   state.designs = next;
   saveLocal();
   if(currentFingerprint === nextFingerprint){
@@ -3763,27 +3782,123 @@ document.getElementById('add-color-btn').addEventListener('click', () => {
 });
 document.getElementById('new-color').addEventListener('input', (e) => { e.target.classList.remove('error'); });
 
-document.getElementById('add-design-btn').addEventListener('click', () => {
+document.getElementById('add-design-btn').addEventListener('click', async () => {
   const input = document.getElementById('new-design');
+  const button = document.getElementById('add-design-btn');
   const val = input.value.trim();
+
   input.classList.remove('error');
+
   if(!val){
     input.classList.add('error');
     input.placeholder = 'デザイン名を入力してください';
     return;
   }
-  if(state.designs[val]){
+
+  const duplicateInState = Boolean(state.designs[val]);
+  const duplicateInMaster = inventoryAuthorityActive() && Boolean(masterDesignByName(val));
+  if(duplicateInState || duplicateInMaster){
     input.classList.add('error');
+    input.placeholder = '同じデザイン名があります';
     return;
   }
-  state.designs[val] = { colors: [...DEFAULT_COLORS], stock: {}, planned: {}, starred: false };
-  state.activeDesign = val;
-  input.value = '';
-  renderTabs();
-  render();
-  save();
+
+  if(button) button.disabled = true;
+
+  try {
+    // master運用中は、masterのDesignマスターを正式データとして追加する。
+    if(inventoryAuthorityActive()){
+      const designId = stableId('design', val);
+      const designsMap = { ...(masterDocument?.masters?.designs || {}) };
+
+      // stableId衝突への安全策
+      let finalId = designId;
+      let suffix = 2;
+      while(designsMap[finalId] && String(designsMap[finalId]?.managementName || '') !== val){
+        finalId = `${designId}_${suffix++}`;
+      }
+
+      designsMap[finalId] = {
+        id: finalId,
+        managementName: val,
+        salesName: val,
+        legacyKey: val,
+        starred: false,
+        createdAt: nowIso(),
+        updatedAt: nowIso()
+      };
+
+      const masters = {
+        ...(masterDocument.masters || {}),
+        designs: designsMap
+      };
+
+      // syncSharedFromMaster が新規DesignのColor構成を保持できるよう、
+      // 先にローカルstateにも作成する。
+      const availableLegacyColors = masterColors()
+        .map(color => color.legacyKey || color.managementName)
+        .filter(Boolean);
+
+      const initialColors = availableLegacyColors.length
+        ? Array.from(new Set(availableLegacyColors))
+        : [...DEFAULT_COLORS];
+
+      state.designs[val] = {
+        colors: initialColors,
+        stock: {},
+        planned: {},
+        starred: false
+      };
+      ensureStock(val);
+
+      masterDocument = { ...masterDocument, masters };
+      const saved = await saveMasterData({ masters });
+      if(saved === false){
+        delete state.designs[val];
+        input.classList.add('error');
+        input.placeholder = '保存に失敗しました';
+        return;
+      }
+
+      state.activeDesign = val;
+      input.value = '';
+      saveLocal();
+
+      // 在庫0のDesignもsharedへ保存する。
+      await syncSharedFromMaster();
+      renderTabs();
+      render();
+      return;
+    }
+
+    // master移行前の互換処理
+    state.designs[val] = {
+      colors: [...DEFAULT_COLORS],
+      stock: {},
+      planned: {},
+      starred: false
+    };
+    ensureStock(val);
+    state.activeDesign = val;
+    input.value = '';
+    renderTabs();
+    render();
+    save();
+  } catch(error){
+    console.error('add design failed', error);
+    input.classList.add('error');
+    input.placeholder = 'デザイン追加に失敗しました';
+  } finally {
+    if(button) button.disabled = false;
+  }
 });
 document.getElementById('new-design').addEventListener('input', (e) => { e.target.classList.remove('error'); });
+document.getElementById('new-design').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    document.getElementById('add-design-btn').click();
+  }
+});
 
 document.getElementById('sort-mode').addEventListener('change', (e) => {
   state.sortMode = e.target.value;
