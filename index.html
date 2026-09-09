@@ -709,6 +709,157 @@
     font-size: 12px;
     color: var(--text-secondary);
   }
+  .task-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .task-stat {
+    padding: 11px 10px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--card);
+  }
+  .task-stat-label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .task-stat strong { font-size: 21px; }
+  .task-order-card,
+  .task-add-card,
+  .task-card {
+    margin-bottom: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .task-order-title,
+  .task-add-title {
+    margin-bottom: 9px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .task-shortage-section + .task-shortage-section { margin-top: 10px; }
+  .task-shortage-heading {
+    margin-bottom: 5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .task-shortage-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .task-shortage-row:first-of-type { border-top: 0; }
+  .task-shortage-meta {
+    color: var(--text-secondary);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .task-shortage-need { color: var(--danger); font-weight: 700; }
+  .task-no-shortage {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .task-add-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .task-add-grid .task-field-wide { grid-column: 1 / -1; }
+  .task-add-grid select,
+  .task-qty-input,
+  .task-method-select {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+  }
+  .task-form-body {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    padding: 0 9px;
+    border-radius: 9px;
+    background: var(--bg);
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  .task-qty-control {
+    display: grid;
+    grid-template-columns: 36px minmax(54px, 1fr) 36px;
+    gap: 5px;
+    align-items: center;
+  }
+  .task-qty-control .mini-qty-btn { width: 36px; height: 38px; }
+  .task-qty-input { text-align: center; font-weight: 700; }
+  .task-add-btn,
+  .task-complete-btn {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--accent);
+    border-radius: 9px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .task-complete-btn:disabled { opacity: .45; }
+  .task-list { display: grid; gap: 8px; }
+  .task-card { margin-bottom: 0; }
+  .task-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 9px;
+  }
+  .task-card-title { font-size: 14px; font-weight: 700; }
+  .task-card-sub { margin-top: 2px; font-size: 11px; color: var(--text-secondary); }
+  .task-method-badge {
+    flex-shrink: 0;
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: var(--bg);
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+  .task-card-controls {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) 100px;
+    gap: 8px;
+    align-items: end;
+  }
+  .task-resource-note {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .task-resource-note.warn { color: var(--danger); }
+  .task-empty {
+    padding: 18px 12px;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
   .meta-row { align-items: flex-start; }
   .meta-dates { display: grid; gap: 3px; min-width: 0; }
 
@@ -1086,6 +1237,10 @@
     .mini-summary {
       padding: 13px 16px;
     }
+    .task-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .task-add-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .task-add-grid .task-field-wide { grid-column: auto; }
+    .task-card-controls { grid-template-columns: minmax(260px, 1fr) 140px; }
   }
 
   @media (min-width: 1100px) {
@@ -1158,7 +1313,7 @@
   <button type="button" data-view="finished" class="active">完成品</button>
   <button type="button" data-view="blank">未プリント</button>
   <button type="button" data-view="sheets">シート</button>
-  <button type="button" data-view="plan">制作予定</button>
+  <button type="button" data-view="plan">制作タスク</button>
 </nav>
 
 <div class="master-tools" style="gap:8px;">
@@ -1215,12 +1370,9 @@
     <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
     <button class="icon-btn" id="add-color-btn">＋</button>
   </div>
-  <div class="section-divider">
-    <div class="section-title" style="margin-bottom:8px;">Design追加</div>
-    <div class="add-row">
-      <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
-      <button class="icon-btn" id="add-design-btn" type="button">＋</button>
-    </div>
+  <div class="section-divider add-row legacy-editor-row">
+    <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
+    <button class="icon-btn" id="add-design-btn">＋</button>
   </div>
 </section>
 
@@ -1255,10 +1407,11 @@
 </section>
 
 <section id="view-plan" class="view-panel" hidden>
-  <div class="section-title">制作予定</div>
-  <div class="plan-body-note">制作予定は現在 Design、Color、Size で管理しています。制作予定のBody指定は次の工程で追加します。</div>
+  <div class="section-title">制作タスク</div>
+  <div class="section-note">制作するTシャツをタスク登録します。自社制作は未プリントBodyとシート在庫から制作可能枚数を自動計算し、完了時に資材を減らして完成品在庫を増やします。外注は資材在庫を減らしません。</div>
   <div id="production-summary"></div>
-  <div class="tabs" id="plan-design-tabs"></div>
+  <div id="task-order-list"></div>
+  <div id="task-add-area"></div>
   <div id="plan-app"></div>
 </section>
 </div>
@@ -1303,7 +1456,6 @@ const STORAGE_KEY = 'tshirt-stock-by-design';
 const UI_STORAGE_KEY = 'tshirt-stock-ui';
 const PRE_V2_BACKUP_KEY = 'tshirt-stock-pre-v2-backup';
 const SCHEMA_VERSION = 2;
-const APP_PATCH_VERSION = '20260909-design-add-visible';
 const LEGACY_BODY_ID = 'body_unassigned';
 let cloudReady = false;
 let sharedDocument = null;
@@ -1517,6 +1669,8 @@ function buildV2SchemaFromLegacy(designs){
     blank_orders: {},
     print_sheets: {},
     sheet_orders: {},
+    production_tasks: {},
+    productionTasksVersion: 0,
     migration: {
       from: 'designs',
       version: 1,
@@ -1600,6 +1754,8 @@ function buildMasterMirrorPatch(){
     blank_orders: masterDocument?.blank_orders || {},
     print_sheets: masterDocument?.print_sheets || {},
     sheet_orders: masterDocument?.sheet_orders || {},
+    production_tasks: masterDocument?.production_tasks || {},
+    productionTasksVersion: masterDocument?.productionTasksVersion || 0,
     migration: masterDocument?.migration || built.migration
   };
 }
@@ -2049,108 +2205,23 @@ function inventoryGrandTotalIncludingLegacy(inventory){
   return total;
 }
 
-function normalizedMasterLabel(value){
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_\-\/]+/g, '');
-}
-
-function canonicalBodyForKey(key){
-  const candidates = assignableBodies();
-  const aliases = {
-    organic: ['organic', 'オーガニック', 'organiccottontshirt'],
-    vintage: ['vintage', 'ヴィンテージ', 'vintagewashedtshirt'],
-    mij: ['mij', 'madeinjapan', '日本製', 'madeinjapantshirt']
-  }[key] || [];
-
-  return candidates.find(body => {
-    const values = [
-      body.managementName,
-      body.salesName,
-      body.id
-    ].map(normalizedMasterLabel);
-
-    return values.some(value =>
-      aliases.some(alias => {
-        const a = normalizedMasterLabel(alias);
-        return value === a || value.includes(a) || a.includes(value);
-      })
-    );
-  }) || null;
-}
-
-const PINKOI_CANONICAL_COLOR_RULES = [
-  { canonical: 'Natural', body: 'organic', aliases: ['Natural', 'ナチュラル', 'NAT'] },
-  { canonical: 'Black', body: 'organic', aliases: ['Black', 'ブラック', 'BLK'] },
-  { canonical: 'Green', body: 'organic', aliases: ['Green', 'グリーン', 'GRN'] },
-  { canonical: 'Light Purple', body: 'organic', aliases: ['Light Purple', 'パープル', 'LPR'] },
-  { canonical: 'Pink', body: 'organic', aliases: ['Pink', 'ピンク', 'PNK'] },
-  { canonical: 'Beige Grey', body: 'organic', aliases: ['Beige Grey', 'ベージュ', 'BGR'] },
-
-  { canonical: 'Vintage Black', body: 'vintage', aliases: ['Vintage Black', 'VB', 'VBLK'] },
-  { canonical: 'Vintage Navy', body: 'vintage', aliases: ['Vintage Navy', 'VN', 'VNVY'] },
-  { canonical: 'Vintage Light Grey', body: 'vintage', aliases: ['Vintage Light Grey', 'VG', 'VLGR'] },
-  { canonical: 'Vintage Purple', body: 'vintage', aliases: ['Vintage Purple', 'VP', 'VPUR'] },
-
-  { canonical: 'Black JP', body: 'mij', aliases: ['Black JP', 'JP_BLK', 'BlackJP'] },
-  { canonical: 'White JP', body: 'mij', aliases: ['White JP', 'JP_WHT', 'WhiteJP'] },
-  { canonical: 'Grey JP', body: 'mij', aliases: ['Grey JP', 'JP_GRY', 'GreyJP', 'Gray JP'] }
-];
-
-function matchingCanonicalColorRule(color){
-  const values = [
-    color?.managementName,
-    color?.pinkoiName,
-    color?.legacyKey
-  ].map(normalizedMasterLabel).filter(Boolean);
-
-  return PINKOI_CANONICAL_COLOR_RULES.find(rule =>
-    rule.aliases.some(alias => values.includes(normalizedMasterLabel(alias)))
-  ) || null;
-}
-
 async function ensureKnownColorMappings(){
   if(!inventoryAuthorityActive() || !masterDocument?.masters?.colors) return false;
-
-  const bodyByKey = {
-    organic: canonicalBodyForKey('organic'),
-    vintage: canonicalBodyForKey('vintage'),
-    mij: canonicalBodyForKey('mij')
-  };
+  const bodies = assignableBodies();
+  const organic = bodies.find(body => String(body.managementName || '').trim().toLowerCase() === 'organic');
+  if(!organic) return false;
 
   const colorsMap = { ...(masterDocument.masters.colors || {}) };
   let changed = false;
-
   Object.entries(colorsMap).forEach(([colorId, color]) => {
-    const rule = matchingCanonicalColorRule(color);
-    if(!rule) return;
-
-    const body = bodyByKey[rule.body];
-    const nextBodyId = body?.id || color.bodyId || '';
-
-    // Pinkoi Inventory側の名称を正規名として使う。
-    // legacyKey は旧アプリ互換のため変更しない。
-    const nextColor = {
-      ...color,
-      managementName: rule.canonical,
-      pinkoiName: rule.canonical,
-      bodyId: nextBodyId,
-      updatedAt: nowIso()
-    };
-
-    if(
-      nextColor.managementName !== color.managementName ||
-      nextColor.pinkoiName !== color.pinkoiName ||
-      nextColor.bodyId !== color.bodyId
-    ){
-      colorsMap[colorId] = nextColor;
+    const name = String(color.managementName || color.legacyKey || '').trim();
+    // ユーザー確認済み: ナチュラルはすべて Organic。
+    if(name === 'ナチュラル' && color.bodyId !== organic.id){
+      colorsMap[colorId] = { ...color, bodyId: organic.id, updatedAt: nowIso() };
       changed = true;
     }
   });
-
   if(!changed) return false;
-
   const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
   masterDocument = { ...masterDocument, masters };
   return await saveMasterData({ masters });
@@ -2445,24 +2516,6 @@ function stockFingerprint(designs){
   return rows.join('\u241e');
 }
 
-function sharedDesignFingerprint(designs){
-  const rows = [];
-  Object.keys(designs || {}).sort((a,b) => a.localeCompare(b, 'ja')).forEach(designName => {
-    const d = designs[designName] || {};
-    rows.push(`D\u241f${designName}\u241f${d.starred ? 1 : 0}`);
-
-    const colors = Array.from(new Set(d.colors || [])).sort((a,b) => a.localeCompare(b, 'ja'));
-    colors.forEach(colorName => {
-      rows.push(`C\u241f${designName}\u241f${colorName}`);
-      SIZES.forEach(sizeName => {
-        const qty = Math.max(0, Number(d.stock?.[colorName]?.[sizeName] || 0));
-        rows.push(`S\u241f${designName}\u241f${colorName}\u241f${sizeName}\u241f${qty}`);
-      });
-    });
-  });
-  return rows.join('\u241e');
-}
-
 
 function buildLegacyProductionPlanFromState(){
   const plan = {};
@@ -2488,6 +2541,8 @@ function buildLegacyProductionPlanFromState(){
 
 async function syncProductionPlanToMaster(){
   if(!inventoryAuthorityActive()) return false;
+  // 制作タスク移行後は旧 planned データを master へ書き戻さない。
+  if(Number(masterDocument?.productionTasksVersion || 0) >= 1) return true;
   const all = { ...(masterDocument?.production_plan_v2 || {}) };
   all[LEGACY_BODY_ID] = buildLegacyProductionPlanFromState();
   masterDocument = { ...masterDocument, production_plan_v2: all };
@@ -2497,9 +2552,8 @@ async function syncProductionPlanToMaster(){
 async function syncSharedFromMaster(){
   if(!inventoryAuthorityActive() || !cloudReady) return false;
   const next = buildSharedDesignsFromMaster();
-  // 在庫数だけでなく、在庫0の新規Design / Colorも同期対象にする。
-  const currentFingerprint = sharedDesignFingerprint(sharedDocument?.designs || state.designs || {});
-  const nextFingerprint = sharedDesignFingerprint(next);
+  const currentFingerprint = stockFingerprint(sharedDocument?.designs || state.designs || {});
+  const nextFingerprint = stockFingerprint(next);
   state.designs = next;
   saveLocal();
   if(currentFingerprint === nextFingerprint){
@@ -3159,17 +3213,8 @@ function renderBlankSummary(){
   const box = document.getElementById('blank-summary');
   if(!box) return;
   const selected = state.blankBodyId || LEGACY_BODY_ID;
-  const allStock = blankGrandTotal();
-  const unclassifiedStock = blankTotalForBody(LEGACY_BODY_ID);
-  const classifiedStock = Math.max(0, allStock - unclassifiedStock);
-
   box.innerHTML = `
-    <div class="mini-summary">
-      <span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span>
-      <span>全Body <strong>${allStock}</strong> 枚</span>
-      <span>分類済 <strong>${classifiedStock}</strong> 枚</span>
-      <span>未分類 <strong>${unclassifiedStock}</strong> 枚</span>
-    </div>
+    <div class="mini-summary"><span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
     <div class="mini-summary"><span>発注数　選択Body <strong>${blankOrderTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>`;
 }
 
@@ -3366,6 +3411,409 @@ function renderSheetInventory(){
   });
 }
 
+
+function taskId(){
+  return `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+}
+
+function productionTasks(){
+  return masterDocument?.production_tasks || {};
+}
+
+function productionTaskRows(){
+  const designs = masterDocument?.masters?.designs || {};
+  const colors = masterDocument?.masters?.colors || {};
+  const sizes = masterDocument?.masters?.sizes || {};
+  const bodies = masterDocument?.masters?.bodies || {};
+  return Object.values(productionTasks())
+    .filter(task => Math.max(0, Number(task?.qty || 0)) > 0)
+    .map(task => {
+      const color = colors[task.colorId] || {};
+      const bodyId = color.bodyId || task.bodyId || '';
+      return {
+        ...task,
+        qty: Math.max(0, Number(task.qty || 0)),
+        bodyId,
+        designName: designs[task.designId]?.managementName || designs[task.designId]?.legacyKey || task.designId,
+        colorName: color.managementName || color.legacyKey || task.colorId,
+        sizeName: sizes[task.sizeId]?.managementName || task.sizeId,
+        sizeOrder: Number(sizes[task.sizeId]?.order || 999),
+        bodyName: bodies[bodyId]?.managementName || (bodyId ? bodyId : 'Body未設定'),
+        starred: Boolean(designs[task.designId]?.starred),
+        method: task.method === 'outsourced' ? 'outsourced' : 'inhouse'
+      };
+    })
+    .sort((a,b) => {
+      if(a.starred !== b.starred) return Number(b.starred) - Number(a.starred);
+      const d = a.designName.localeCompare(b.designName, 'ja');
+      if(d) return d;
+      const c = a.colorName.localeCompare(b.colorName, 'ja');
+      if(c) return c;
+      return a.sizeOrder - b.sizeOrder;
+    });
+}
+
+function buildTasksFromLegacyPlan(){
+  const tasks = {};
+  const combined = new Map();
+  Object.values(masterDocument?.production_plan_v2 || {}).forEach(designTree => {
+    Object.entries(designTree || {}).forEach(([designId, colorTree]) => {
+      Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+        Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+          const qty = Math.max(0, Number(cell?.qty || 0));
+          if(qty <= 0) return;
+          const key = `${designId}|${colorId}|${sizeId}`;
+          combined.set(key, (combined.get(key) || 0) + qty);
+        });
+      });
+    });
+  });
+  combined.forEach((qty, key) => {
+    const [designId, colorId, sizeId] = key.split('|');
+    const id = taskId();
+    tasks[id] = { id, designId, colorId, sizeId, qty, method: 'inhouse', createdAt: nowIso(), updatedAt: nowIso() };
+  });
+  return tasks;
+}
+
+let productionTaskMigrationBusy = false;
+async function ensureProductionTasks(){
+  if(!masterReady || !masterDocument || productionTaskMigrationBusy) return false;
+  if(Number(masterDocument.productionTasksVersion || 0) >= 1 && masterDocument.production_tasks) return true;
+  productionTaskMigrationBusy = true;
+  try {
+    const existingTasks = masterDocument.production_tasks || {};
+    const tasks = Object.keys(existingTasks).length ? existingTasks : buildTasksFromLegacyPlan();
+    masterDocument = { ...masterDocument, production_tasks: tasks, productionTasksVersion: 1, productionTasksMigratedAt: nowIso() };
+    return await saveMasterData({ production_tasks: tasks, productionTasksVersion: 1, productionTasksMigratedAt: nowIso() });
+  } finally {
+    productionTaskMigrationBusy = false;
+  }
+}
+
+function blankQtyForTask(task){
+  if(!task.bodyId) return 0;
+  return Math.max(0, Number(masterDocument?.blank_stock?.[task.bodyId]?.[task.colorId]?.[task.sizeId]?.qty || 0));
+}
+
+function blankOrderQtyForTask(task){
+  if(!task.bodyId) return 0;
+  return Math.max(0, Number(masterDocument?.blank_orders?.[task.bodyId]?.[task.colorId]?.[task.sizeId]?.qty || 0));
+}
+
+function sheetQtyForTask(task){
+  return Math.max(0, Number(masterDocument?.print_sheets?.[task.designId]?.qty || 0));
+}
+
+function sheetOrderQtyForTask(task){
+  return Math.max(0, Number(masterDocument?.sheet_orders?.[task.designId]?.qty || 0));
+}
+
+function taskResourceSummary(){
+  const rows = productionTaskRows();
+  const inhouse = rows.filter(x => x.method === 'inhouse');
+  const outsourced = rows.filter(x => x.method === 'outsourced');
+  const bodyDemand = new Map();
+  const sheetDemand = new Map();
+
+  inhouse.forEach(task => {
+    const bkey = `${task.bodyId}|${task.colorId}|${task.sizeId}`;
+    if(task.bodyId) bodyDemand.set(bkey, (bodyDemand.get(bkey) || 0) + task.qty);
+    sheetDemand.set(task.designId, (sheetDemand.get(task.designId) || 0) + task.qty);
+  });
+
+  const bodyShortages = [];
+  bodyDemand.forEach((needed, key) => {
+    const [bodyId, colorId, sizeId] = key.split('|');
+    const sample = inhouse.find(t => t.bodyId === bodyId && t.colorId === colorId && t.sizeId === sizeId);
+    const stock = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+    const ordered = Math.max(0, Number(masterDocument?.blank_orders?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+    const shortage = Math.max(0, needed - stock);
+    if(shortage > 0) bodyShortages.push({ ...sample, needed, stock, ordered, shortage, additionalOrder: Math.max(0, shortage - ordered) });
+  });
+
+  const sheetShortages = [];
+  sheetDemand.forEach((needed, designId) => {
+    const sample = inhouse.find(t => t.designId === designId);
+    const stock = Math.max(0, Number(masterDocument?.print_sheets?.[designId]?.qty || 0));
+    const ordered = Math.max(0, Number(masterDocument?.sheet_orders?.[designId]?.qty || 0));
+    const shortage = Math.max(0, needed - stock);
+    if(shortage > 0) sheetShortages.push({ ...sample, needed, stock, ordered, shortage, additionalOrder: Math.max(0, shortage - ordered) });
+  });
+
+  // Source -> BodySKU -> Design -> Sink の最大フローで、全タスクを同時に見た制作可能枚数を計算する。
+  const capacities = new Map();
+  const adj = new Map();
+  const addEdge = (u,v,c) => {
+    if(!adj.has(u)) adj.set(u, new Set());
+    if(!adj.has(v)) adj.set(v, new Set());
+    adj.get(u).add(v); adj.get(v).add(u);
+    capacities.set(`${u}\u241f${v}`, (capacities.get(`${u}\u241f${v}`) || 0) + Math.max(0, c));
+    if(!capacities.has(`${v}\u241f${u}`)) capacities.set(`${v}\u241f${u}`, 0);
+  };
+  const source = '__source__', sink = '__sink__';
+  bodyDemand.forEach((needed, key) => {
+    const [bodyId,colorId,sizeId] = key.split('|');
+    const stock = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+    addEdge(source, `b:${key}`, Math.min(needed, stock));
+  });
+  inhouse.forEach(task => {
+    if(!task.bodyId) return;
+    const key = `${task.bodyId}|${task.colorId}|${task.sizeId}`;
+    addEdge(`b:${key}`, `d:${task.designId}`, task.qty);
+  });
+  sheetDemand.forEach((needed, designId) => {
+    const stock = Math.max(0, Number(masterDocument?.print_sheets?.[designId]?.qty || 0));
+    addEdge(`d:${designId}`, sink, Math.min(needed, stock));
+  });
+  let maxFlow = 0;
+  while(true){
+    const parent = new Map([[source, null]]);
+    const q = [source];
+    while(q.length && !parent.has(sink)){
+      const u = q.shift();
+      for(const v of (adj.get(u) || [])){
+        if(parent.has(v)) continue;
+        if((capacities.get(`${u}\u241f${v}`) || 0) <= 0) continue;
+        parent.set(v,u); q.push(v);
+      }
+    }
+    if(!parent.has(sink)) break;
+    let flow = Infinity;
+    for(let v=sink; v!==source; v=parent.get(v)){
+      const u=parent.get(v); flow=Math.min(flow, capacities.get(`${u}\u241f${v}`) || 0);
+    }
+    for(let v=sink; v!==source; v=parent.get(v)){
+      const u=parent.get(v);
+      capacities.set(`${u}\u241f${v}`, (capacities.get(`${u}\u241f${v}`) || 0)-flow);
+      capacities.set(`${v}\u241f${u}`, (capacities.get(`${v}\u241f${u}`) || 0)+flow);
+    }
+    maxFlow += flow;
+  }
+
+  return {
+    rows,
+    total: rows.reduce((sum,x)=>sum+x.qty,0),
+    inhouseTotal: inhouse.reduce((sum,x)=>sum+x.qty,0),
+    outsourcedTotal: outsourced.reduce((sum,x)=>sum+x.qty,0),
+    producibleNow: maxFlow,
+    bodyShortages,
+    sheetShortages
+  };
+}
+
+async function saveProductionTasks(tasks){
+  masterDocument = { ...masterDocument, production_tasks: tasks, productionTasksVersion: 1 };
+  return await saveMasterData({ production_tasks: tasks, productionTasksVersion: 1 });
+}
+
+async function addProductionTask(designId, colorId, sizeId, qty, method){
+  qty = Math.max(0, parseInt(qty,10) || 0);
+  if(!designId || !colorId || !sizeId || qty <= 0) return false;
+  const tasks = structuredClone(productionTasks());
+  const normalizedMethod = method === 'outsourced' ? 'outsourced' : 'inhouse';
+  const existing = Object.values(tasks).find(t => t.designId === designId && t.colorId === colorId && t.sizeId === sizeId && (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod);
+  if(existing){
+    tasks[existing.id] = { ...existing, qty: Math.max(0, Number(existing.qty || 0)) + qty, updatedAt: nowIso() };
+  } else {
+    const id = taskId();
+    tasks[id] = { id, designId, colorId, sizeId, qty, method: normalizedMethod, createdAt: nowIso(), updatedAt: nowIso() };
+  }
+  return await saveProductionTasks(tasks);
+}
+
+async function updateProductionTask(taskIdValue, patch){
+  const tasks = structuredClone(productionTasks());
+  if(!tasks[taskIdValue]) return false;
+  const next = { ...tasks[taskIdValue], ...patch, updatedAt: nowIso() };
+  next.qty = Math.max(0, Number(next.qty || 0));
+  if(next.qty <= 0) delete tasks[taskIdValue];
+  else tasks[taskIdValue] = next;
+  return await saveProductionTasks(tasks);
+}
+
+function setFinishedInventoryQtyTree(root, bodyId, designId, colorId, sizeId, qty){
+  const next = structuredClone(root || {});
+  if(!next[bodyId]) next[bodyId] = {};
+  if(!next[bodyId][designId]) next[bodyId][designId] = {};
+  if(!next[bodyId][designId][colorId]) next[bodyId][designId][colorId] = {};
+  if(qty > 0) next[bodyId][designId][colorId][sizeId] = { qty, updatedAt: nowIso() };
+  else delete next[bodyId][designId][colorId][sizeId];
+  return next;
+}
+
+async function completeProductionTask(taskIdValue){
+  const task = productionTaskRows().find(x => x.id === taskIdValue);
+  if(!task || task.qty <= 0) return false;
+  if(!task.bodyId){
+    alert('このColorのBodyが未設定です。先にColor設定でBodyを指定してください。');
+    return false;
+  }
+  const inhouse = task.method === 'inhouse';
+  const blankQty = blankQtyForTask(task);
+  const sheetQty = sheetQtyForTask(task);
+  if(inhouse && (blankQty < task.qty || sheetQty < task.qty)){
+    alert(`資材が不足しています。\nBody在庫 ${blankQty}枚 / シート在庫 ${sheetQty}枚 / タスク ${task.qty}枚`);
+    return false;
+  }
+  const label = `${task.designName} / ${task.colorName} / ${task.sizeName} × ${task.qty}`;
+  const methodLabel = inhouse ? '自社制作' : '外注';
+  if(!confirm(`${label}\n${methodLabel}のタスクを完了しますか？\n完成品在庫を ${task.qty}枚 増やします。${inhouse ? '\n未プリントBodyとシート在庫を同数減らします。' : '\n未プリントBodyとシート在庫は減らしません。'}`)) return false;
+
+  let blank = structuredClone(masterDocument?.blank_stock || {});
+  let sheets = structuredClone(masterDocument?.print_sheets || {});
+  let inventory = structuredClone(masterDocument?.inventory_v2 || {});
+  const tasks = structuredClone(productionTasks());
+
+  if(inhouse){
+    blank = setNestedQty(blank, task.bodyId, task.colorId, task.sizeId, blankQty - task.qty);
+    const nextSheetQty = sheetQty - task.qty;
+    if(nextSheetQty > 0) sheets[task.designId] = { qty: nextSheetQty, updatedAt: nowIso() };
+    else delete sheets[task.designId];
+  }
+
+  const finishedBefore = masterInventoryQty(task.bodyId, task.designId, task.colorId, task.sizeId);
+  inventory = setFinishedInventoryQtyTree(inventory, task.bodyId, task.designId, task.colorId, task.sizeId, finishedBefore + task.qty);
+  delete tasks[task.id];
+
+  masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, production_tasks: tasks, productionTasksVersion: 1 };
+  const saved = await saveMasterData({ blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, production_tasks: tasks, productionTasksVersion: 1 });
+  if(saved === false) return false;
+  await syncSharedFromMaster();
+  renderCurrentView();
+  return true;
+}
+
+function renderProductionTasks(){
+  const summaryBox = document.getElementById('production-summary');
+  const orderBox = document.getElementById('task-order-list');
+  const addBox = document.getElementById('task-add-area');
+  const listBox = document.getElementById('plan-app');
+  if(!summaryBox || !orderBox || !addBox || !listBox) return;
+  if(!masterReady || !masterDocument){
+    summaryBox.innerHTML = '';
+    orderBox.innerHTML = '';
+    addBox.innerHTML = '';
+    listBox.innerHTML = '<div class="task-empty">マスターデータに接続すると制作タスクを管理できます。</div>';
+    return;
+  }
+  if(Number(masterDocument.productionTasksVersion || 0) < 1 || !masterDocument.production_tasks){
+    ensureProductionTasks().then(() => renderProductionTasks());
+    return;
+  }
+
+  const res = taskResourceSummary();
+  summaryBox.innerHTML = `<div class="task-summary-grid">
+    <div class="task-stat"><span class="task-stat-label">タスク合計</span><strong>${res.total}</strong> 枚</div>
+    <div class="task-stat"><span class="task-stat-label">自社制作</span><strong>${res.inhouseTotal}</strong> 枚</div>
+    <div class="task-stat"><span class="task-stat-label">今すぐ制作可能</span><strong>${res.producibleNow}</strong> 枚</div>
+    <div class="task-stat"><span class="task-stat-label">外注</span><strong>${res.outsourcedTotal}</strong> 枚</div>
+  </div>`;
+
+  const bodyRows = res.bodyShortages.map(x => `<div class="task-shortage-row"><span>${escapeHtml(x.bodyName)} / ${escapeHtml(x.colorName)} / ${escapeHtml(x.sizeName)}</span><span class="task-shortage-meta">必要 ${x.needed} / 在庫 ${x.stock} / <span class="task-shortage-need">不足 ${x.shortage}</span>${x.ordered ? ` / 発注済 ${x.ordered}` : ''}${x.additionalOrder ? ` / 追加発注 ${x.additionalOrder}` : ''}</span></div>`).join('');
+  const sheetRows = res.sheetShortages.map(x => `<div class="task-shortage-row"><span>${escapeHtml(x.designName)} シート</span><span class="task-shortage-meta">必要 ${x.needed} / 在庫 ${x.stock} / <span class="task-shortage-need">不足 ${x.shortage}</span>${x.ordered ? ` / 発注済 ${x.ordered}` : ''}${x.additionalOrder ? ` / 追加発注 ${x.additionalOrder}` : ''}</span></div>`).join('');
+  orderBox.innerHTML = `<div class="task-order-card"><div class="task-order-title">発注リスト</div>
+    ${bodyRows || sheetRows ? `${bodyRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">未プリントBody</div>${bodyRows}</div>` : ''}${sheetRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">プリントシート</div>${sheetRows}</div>` : ''}` : '<div class="task-no-shortage">現在のタスクに対する資材不足はありません。</div>'}
+  </div>`;
+
+  const designs = masterDesigns();
+  const colors = masterColors().filter(c => c.bodyId);
+  const sizes = masterSizes();
+  const defaultDesign = designs[0]?.id || '';
+  const defaultColor = colors[0]?.id || '';
+  const defaultSize = sizes[0]?.id || '';
+  addBox.innerHTML = `<div class="task-add-card"><div class="task-add-title">タスクを追加</div><div class="task-add-grid">
+    <div><label class="field-label">Design</label><select id="task-add-design">${designs.map(x=>`<option value="${escapeHtml(x.id)}">${x.starred?'★ ':''}${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
+    <div><label class="field-label">Color</label><select id="task-add-color">${colors.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
+    <div><label class="field-label">Size</label><select id="task-add-size">${sizes.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
+    <div><label class="field-label">制作方法</label><select id="task-add-method"><option value="inhouse">自社制作</option><option value="outsourced">外注</option></select></div>
+    <div class="task-field-wide"><label class="field-label">Body</label><div id="task-add-body" class="task-form-body"></div></div>
+    <div class="task-field-wide"><label class="field-label">制作可能</label><div id="task-add-capacity" class="task-form-body"></div></div>
+    <div class="task-field-wide"><label class="field-label">数量</label><div class="task-qty-control"><button id="task-add-minus" class="mini-qty-btn" type="button">−</button><input id="task-add-qty" class="task-qty-input" type="number" min="1" inputmode="numeric" value="1"><button id="task-add-plus" class="mini-qty-btn" type="button">＋</button></div></div>
+    <div class="task-field-wide"><button id="task-add-btn" class="task-add-btn" type="button">タスク追加</button></div>
+  </div></div>`;
+
+  const colorSelect = document.getElementById('task-add-color');
+  const designSelect = document.getElementById('task-add-design');
+  const sizeSelect = document.getElementById('task-add-size');
+  const methodSelect = document.getElementById('task-add-method');
+  const bodyLabel = document.getElementById('task-add-body');
+  const capacityLabel = document.getElementById('task-add-capacity');
+  const refreshResource = () => {
+    const colorId = colorSelect?.value || defaultColor;
+    const designId = designSelect?.value || defaultDesign;
+    const sizeId = sizeSelect?.value || defaultSize;
+    const bodyId = masterDocument?.masters?.colors?.[colorId]?.bodyId || '';
+    bodyLabel.textContent = masterDocument?.masters?.bodies?.[bodyId]?.managementName || 'Body未設定';
+    if(methodSelect?.value === 'outsourced'){
+      capacityLabel.textContent = '外注はBody・シート在庫を使用しません';
+      return;
+    }
+    const bodyQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+    const sheetQty = Math.max(0, Number(masterDocument?.print_sheets?.[designId]?.qty || 0));
+    capacityLabel.textContent = `Body ${bodyQty}枚 / シート ${sheetQty}枚 / 制作可能 ${Math.min(bodyQty, sheetQty)}枚`;
+  };
+  refreshResource();
+  colorSelect?.addEventListener('change', refreshResource);
+  designSelect?.addEventListener('change', refreshResource);
+  sizeSelect?.addEventListener('change', refreshResource);
+  methodSelect?.addEventListener('change', refreshResource);
+  const qtyInput = document.getElementById('task-add-qty');
+  document.getElementById('task-add-minus')?.addEventListener('click', () => qtyInput.value = Math.max(1, (parseInt(qtyInput.value,10)||1)-1));
+  document.getElementById('task-add-plus')?.addEventListener('click', () => qtyInput.value = Math.max(1, (parseInt(qtyInput.value,10)||1)+1));
+  document.getElementById('task-add-btn')?.addEventListener('click', async btnEvent => {
+    const designId = document.getElementById('task-add-design')?.value || defaultDesign;
+    const colorId = colorSelect?.value || defaultColor;
+    const sizeId = document.getElementById('task-add-size')?.value || defaultSize;
+    const method = document.getElementById('task-add-method')?.value || 'inhouse';
+    const qty = Math.max(0, parseInt(qtyInput?.value,10)||0);
+    if(!masterDocument?.masters?.colors?.[colorId]?.bodyId){ alert('このColorのBodyが未設定です。先にColor設定でBodyを指定してください。'); return; }
+    btnEvent.currentTarget.disabled = true;
+    await addProductionTask(designId,colorId,sizeId,qty,method);
+    renderProductionTasks();
+  });
+
+  const rows = res.rows;
+  listBox.innerHTML = rows.length ? `<div class="task-list">${rows.map(task => {
+    const bodyStock = blankQtyForTask(task);
+    const sheetStock = sheetQtyForTask(task);
+    const canSingle = task.method === 'outsourced' ? task.qty : Math.min(task.qty, bodyStock, sheetStock);
+    const canComplete = task.method === 'outsourced' || (task.bodyId && bodyStock >= task.qty && sheetStock >= task.qty);
+    const resourceText = task.method === 'outsourced'
+      ? '外注のため、完了しても未プリントBody・シート在庫は減りません。'
+      : `Body在庫 ${bodyStock}枚 / シート在庫 ${sheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`;
+    return `<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span></div>
+      <div class="task-card-controls"><div><label class="field-label">数量</label><div class="task-qty-control"><button class="mini-qty-btn" type="button" data-task-delta="-1" data-task-id="${escapeHtml(task.id)}">−</button><input class="task-qty-input" type="number" min="0" inputmode="numeric" data-task-qty="${escapeHtml(task.id)}" value="${task.qty}"><button class="mini-qty-btn" type="button" data-task-delta="1" data-task-id="${escapeHtml(task.id)}">＋</button></div></div><div><label class="field-label">方法</label><select class="task-method-select" data-task-method="${escapeHtml(task.id)}"><option value="inhouse" ${task.method==='inhouse'?'selected':''}>自社</option><option value="outsourced" ${task.method==='outsourced'?'selected':''}>外注</option></select></div></div>
+      <div class="task-resource-note ${canComplete?'':'warn'}">${escapeHtml(resourceText)}</div>
+      <button class="task-complete-btn" type="button" data-task-complete="${escapeHtml(task.id)}" ${canComplete?'':'disabled'}>タスク完了</button>
+    </div>`;
+  }).join('')}</div>` : '<div class="task-empty">制作タスクはありません。上の「タスクを追加」から登録してください。</div>';
+
+  listBox.querySelectorAll('button[data-task-delta]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-task-id');
+    const task = productionTasks()[id];
+    if(!task) return;
+    const qty = Math.max(0, Number(task.qty || 0) + (parseInt(btn.getAttribute('data-task-delta'),10)||0));
+    btn.disabled = true;
+    await updateProductionTask(id,{qty});
+    renderProductionTasks();
+  }));
+  listBox.querySelectorAll('input[data-task-qty]').forEach(input => input.addEventListener('change', async () => {
+    const id = input.getAttribute('data-task-qty');
+    await updateProductionTask(id,{qty:Math.max(0,parseInt(input.value,10)||0)});
+    renderProductionTasks();
+  }));
+  listBox.querySelectorAll('select[data-task-method]').forEach(select => select.addEventListener('change', async () => {
+    const id = select.getAttribute('data-task-method');
+    await updateProductionTask(id,{method:select.value === 'outsourced' ? 'outsourced' : 'inhouse'});
+    renderProductionTasks();
+  }));
+  listBox.querySelectorAll('button[data-task-complete]').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    await completeProductionTask(btn.getAttribute('data-task-complete'));
+  }));
+}
+
 function renderPlanTabs(){
   const tabs = document.getElementById('plan-design-tabs');
   if(!tabs) return;
@@ -3455,9 +3903,7 @@ function renderCurrentView(){
   } else if(state.activeView === 'sheets'){
     renderSheetInventory();
   } else if(state.activeView === 'plan'){
-    renderProductionSummary();
-    renderPlanTabs();
-    renderPlanEditor();
+    renderProductionTasks();
   }
 }
 
@@ -3785,123 +4231,27 @@ document.getElementById('add-color-btn').addEventListener('click', () => {
 });
 document.getElementById('new-color').addEventListener('input', (e) => { e.target.classList.remove('error'); });
 
-document.getElementById('add-design-btn').addEventListener('click', async () => {
+document.getElementById('add-design-btn').addEventListener('click', () => {
   const input = document.getElementById('new-design');
-  const button = document.getElementById('add-design-btn');
   const val = input.value.trim();
-
   input.classList.remove('error');
-
   if(!val){
     input.classList.add('error');
     input.placeholder = 'デザイン名を入力してください';
     return;
   }
-
-  const duplicateInState = Boolean(state.designs[val]);
-  const duplicateInMaster = inventoryAuthorityActive() && Boolean(masterDesignByName(val));
-  if(duplicateInState || duplicateInMaster){
+  if(state.designs[val]){
     input.classList.add('error');
-    input.placeholder = '同じデザイン名があります';
     return;
   }
-
-  if(button) button.disabled = true;
-
-  try {
-    // master運用中は、masterのDesignマスターを正式データとして追加する。
-    if(inventoryAuthorityActive()){
-      const designId = stableId('design', val);
-      const designsMap = { ...(masterDocument?.masters?.designs || {}) };
-
-      // stableId衝突への安全策
-      let finalId = designId;
-      let suffix = 2;
-      while(designsMap[finalId] && String(designsMap[finalId]?.managementName || '') !== val){
-        finalId = `${designId}_${suffix++}`;
-      }
-
-      designsMap[finalId] = {
-        id: finalId,
-        managementName: val,
-        salesName: val,
-        legacyKey: val,
-        starred: false,
-        createdAt: nowIso(),
-        updatedAt: nowIso()
-      };
-
-      const masters = {
-        ...(masterDocument.masters || {}),
-        designs: designsMap
-      };
-
-      // syncSharedFromMaster が新規DesignのColor構成を保持できるよう、
-      // 先にローカルstateにも作成する。
-      const availableLegacyColors = masterColors()
-        .map(color => color.legacyKey || color.managementName)
-        .filter(Boolean);
-
-      const initialColors = availableLegacyColors.length
-        ? Array.from(new Set(availableLegacyColors))
-        : [...DEFAULT_COLORS];
-
-      state.designs[val] = {
-        colors: initialColors,
-        stock: {},
-        planned: {},
-        starred: false
-      };
-      ensureStock(val);
-
-      masterDocument = { ...masterDocument, masters };
-      const saved = await saveMasterData({ masters });
-      if(saved === false){
-        delete state.designs[val];
-        input.classList.add('error');
-        input.placeholder = '保存に失敗しました';
-        return;
-      }
-
-      state.activeDesign = val;
-      input.value = '';
-      saveLocal();
-
-      // 在庫0のDesignもsharedへ保存する。
-      await syncSharedFromMaster();
-      renderTabs();
-      render();
-      return;
-    }
-
-    // master移行前の互換処理
-    state.designs[val] = {
-      colors: [...DEFAULT_COLORS],
-      stock: {},
-      planned: {},
-      starred: false
-    };
-    ensureStock(val);
-    state.activeDesign = val;
-    input.value = '';
-    renderTabs();
-    render();
-    save();
-  } catch(error){
-    console.error('add design failed', error);
-    input.classList.add('error');
-    input.placeholder = 'デザイン追加に失敗しました';
-  } finally {
-    if(button) button.disabled = false;
-  }
+  state.designs[val] = { colors: [...DEFAULT_COLORS], stock: {}, planned: {}, starred: false };
+  state.activeDesign = val;
+  input.value = '';
+  renderTabs();
+  render();
+  save();
 });
 document.getElementById('new-design').addEventListener('input', (e) => { e.target.classList.remove('error'); });
-document.getElementById('new-design').addEventListener('keydown', (e) => {
-  if(e.key === 'Enter'){
-    e.preventDefault();
-    document.getElementById('add-design-btn').click();
-  }
-});
 
 document.getElementById('sort-mode').addEventListener('change', (e) => {
   state.sortMode = e.target.value;
@@ -4032,6 +4382,7 @@ async function init(){
         await inferColorBodyMappings();
         await normalizeFinishedInventoryByColorMaster();
         await normalizeBlankInventoryByColorMaster();
+        await ensureProductionTasks();
         await syncSharedFromMaster();
       }
       renderCurrentView();
@@ -4084,6 +4435,7 @@ async function init(){
           await ensureKnownColorMappings();
           await normalizeFinishedInventoryByColorMaster();
           await normalizeBlankInventoryByColorMaster();
+          await ensureProductionTasks();
           await syncSharedFromMaster();
         }, 20);
         renderCurrentView();
