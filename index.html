@@ -776,7 +776,8 @@
   .task-add-grid .task-field-wide { grid-column: 1 / -1; }
   .task-add-grid select,
   .task-qty-input,
-  .task-method-select {
+  .task-method-select,
+  .task-purpose-select {
     width: 100%;
     min-width: 0;
     height: 38px;
@@ -879,7 +880,15 @@
   }
   .task-card-title { font-size: 14px; font-weight: 700; }
   .task-card-sub { margin-top: 2px; font-size: 11px; color: var(--text-secondary); }
-  .task-method-badge {
+  .task-badge-group {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .task-method-badge,
+  .task-purpose-badge {
     flex-shrink: 0;
     padding: 4px 7px;
     border-radius: 999px;
@@ -889,7 +898,7 @@
   }
   .task-card-controls {
     display: grid;
-    grid-template-columns: minmax(150px, 1fr) 100px;
+    grid-template-columns: minmax(140px, 1fr) 92px 104px;
     gap: 8px;
     align-items: end;
   }
@@ -1390,6 +1399,11 @@
   }
   .sheet-pair-label { font-size: 11px; font-weight: 700; }
 
+  @media (max-width: 420px) {
+    .task-card-controls { grid-template-columns: 1fr 1fr; }
+    .task-card-controls > div:first-child { grid-column: 1 / -1; }
+  }
+
   /* iPad / PC responsive layout */
   .inventory-shell {
     width: 100%;
@@ -1449,7 +1463,7 @@
     .task-add-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .task-add-grid .task-field-wide { grid-column: auto; }
     .task-size-entry-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .task-card-controls { grid-template-columns: minmax(260px, 1fr) 140px; }
+    .task-card-controls { grid-template-columns: minmax(260px, 1fr) 130px 150px; }
   }
 
   @media (min-width: 1100px) {
@@ -3665,7 +3679,8 @@ function productionTaskRows(){
         sizeOrder: Number(sizes[task.sizeId]?.order || 999),
         bodyName: bodies[bodyId]?.managementName || (bodyId ? bodyId : 'Body未設定'),
         starred: Boolean(designs[task.designId]?.starred),
-        method: task.method === 'outsourced' ? 'outsourced' : 'inhouse'
+        method: task.method === 'outsourced' ? 'outsourced' : 'inhouse',
+        purpose: task.purpose === 'order' ? 'order' : 'stock'
       };
     })
     .sort((a,b) => {
@@ -3697,7 +3712,7 @@ function buildTasksFromLegacyPlan(){
     const [designId, colorId, sizeId] = key.split('|');
     const id = taskId();
     const bodyId = masterDocument?.masters?.colors?.[colorId]?.bodyId || '';
-    tasks[id] = { id, designId, colorId, sizeId, bodyId, qty, method: 'inhouse', createdAt: nowIso(), updatedAt: nowIso() };
+    tasks[id] = { id, designId, colorId, sizeId, bodyId, qty, method: 'inhouse', purpose: 'stock', createdAt: nowIso(), updatedAt: nowIso() };
   });
   return tasks;
 }
@@ -3849,31 +3864,34 @@ async function saveProductionTasks(tasks){
   return await saveMasterData({ production_tasks: tasks, productionTasksVersion: 1 });
 }
 
-async function addProductionTask(designId, bodyId, colorId, sizeId, qty, method){
+async function addProductionTask(designId, bodyId, colorId, sizeId, qty, method, purpose = 'stock'){
   qty = Math.max(0, parseInt(qty,10) || 0);
   if(!designId || !bodyId || !colorId || !sizeId || qty <= 0) return false;
   const tasks = structuredClone(productionTasks());
   const normalizedMethod = method === 'outsourced' ? 'outsourced' : 'inhouse';
+  const normalizedPurpose = purpose === 'order' ? 'order' : 'stock';
   const existing = Object.values(tasks).find(t =>
     t.designId === designId &&
     (t.bodyId || masterDocument?.masters?.colors?.[t.colorId]?.bodyId || '') === bodyId &&
     t.colorId === colorId &&
     t.sizeId === sizeId &&
-    (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod
+    (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod &&
+    (t.purpose === 'order' ? 'order' : 'stock') === normalizedPurpose
   );
   if(existing){
     tasks[existing.id] = { ...existing, bodyId, qty: Math.max(0, Number(existing.qty || 0)) + qty, updatedAt: nowIso() };
   } else {
     const id = taskId();
-    tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, createdAt: nowIso(), updatedAt: nowIso() };
+    tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, purpose: normalizedPurpose, createdAt: nowIso(), updatedAt: nowIso() };
   }
   return await saveProductionTasks(tasks);
 }
 
-async function addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, method){
+async function addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, method, purpose = 'stock'){
   if(!designId || !bodyId || !colorId) return false;
   const tasks = structuredClone(productionTasks());
   const normalizedMethod = method === 'outsourced' ? 'outsourced' : 'inhouse';
+  const normalizedPurpose = purpose === 'order' ? 'order' : 'stock';
   let added = 0;
   Object.entries(sizeQtyMap || {}).forEach(([sizeId, rawQty]) => {
     const qty = Math.max(0, parseInt(rawQty, 10) || 0);
@@ -3883,13 +3901,14 @@ async function addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, me
       (t.bodyId || masterDocument?.masters?.colors?.[t.colorId]?.bodyId || '') === bodyId &&
       t.colorId === colorId &&
       t.sizeId === sizeId &&
-      (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod
+      (t.method === 'outsourced' ? 'outsourced' : 'inhouse') === normalizedMethod &&
+      (t.purpose === 'order' ? 'order' : 'stock') === normalizedPurpose
     );
     if(existing){
       tasks[existing.id] = { ...existing, bodyId, qty: Math.max(0, Number(existing.qty || 0)) + qty, updatedAt: nowIso() };
     } else {
       const id = taskId();
-      tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, createdAt: nowIso(), updatedAt: nowIso() };
+      tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, purpose: normalizedPurpose, createdAt: nowIso(), updatedAt: nowIso() };
     }
     added += qty;
   });
@@ -3935,19 +3954,29 @@ async function completeProductionTask(taskIdValue){
     return false;
   }
   const inhouse = task.method === 'inhouse';
+  const isOrder = task.purpose === 'order';
   const blankQty = blankQtyForTask(task);
   const mainSheetQty = sheetQtyForTask(task);
   const needsSub = sheetSubEnabled(task.designId);
   const subSheetQty = needsSub ? sheetStockQty(task.designId, 'sub') : Infinity;
   if(inhouse && (blankQty < task.qty || mainSheetQty < task.qty || subSheetQty < task.qty)){
     const subText = needsSub ? ` / サブシート ${subSheetQty}枚` : '';
-    alert(`資材が不足しています。\nBody在庫 ${blankQty}枚 / メインシート ${mainSheetQty}枚${subText} / タスク ${task.qty}枚`);
+    alert(`資材が不足しています。
+Body在庫 ${blankQty}枚 / メインシート ${mainSheetQty}枚${subText} / タスク ${task.qty}枚`);
     return false;
   }
   const label = `${task.designName} / ${task.colorName} / ${task.sizeName} × ${task.qty}`;
   const methodLabel = inhouse ? '自社制作' : '外注';
+  const purposeLabel = isOrder ? 'オーダー品' : '在庫用';
   const sheetText = needsSub ? '未プリントBody・メインシート・サブシート在庫を同数減らします。' : '未プリントBodyとシート在庫を同数減らします。';
-  if(!confirm(`${label}\n${methodLabel}のタスクを完了しますか？\n完成品在庫を ${task.qty}枚 増やします。${inhouse ? `\n${sheetText}` : '\n未プリントBodyとシート在庫は減らしません。'}`)) return false;
+  const finishedText = isOrder
+    ? 'オーダー品のため、完成品在庫には追加しません。'
+    : `完成品在庫を ${task.qty}枚 増やします。`;
+  const materialText = inhouse ? sheetText : '未プリントBodyとシート在庫は減らしません。';
+  if(!confirm(`${label}
+${methodLabel} / ${purposeLabel} のタスクを完了しますか？
+${finishedText}
+${materialText}`)) return false;
 
   let blank = structuredClone(masterDocument?.blank_stock || {});
   let sheets = structuredClone(masterDocument?.print_sheets || {});
@@ -3968,14 +3997,16 @@ async function completeProductionTask(taskIdValue){
     else delete sheets[task.designId];
   }
 
-  const finishedBefore = masterInventoryQty(task.bodyId, task.designId, task.colorId, task.sizeId);
-  inventory = setFinishedInventoryQtyTree(inventory, task.bodyId, task.designId, task.colorId, task.sizeId, finishedBefore + task.qty);
+  if(!isOrder){
+    const finishedBefore = masterInventoryQty(task.bodyId, task.designId, task.colorId, task.sizeId);
+    inventory = setFinishedInventoryQtyTree(inventory, task.bodyId, task.designId, task.colorId, task.sizeId, finishedBefore + task.qty);
+  }
   delete tasks[task.id];
 
   masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, production_tasks: tasks, productionTasksVersion: 1 };
   const saved = await saveMasterData({ blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, production_tasks: tasks, productionTasksVersion: 1 });
   if(saved === false) return false;
-  await syncSharedFromMaster();
+  if(!isOrder) await syncSharedFromMaster();
   renderCurrentView();
   return true;
 }
@@ -4024,6 +4055,7 @@ function renderProductionTasks(){
     <div><label class="field-label">Color</label><select id="task-add-color">${colors.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
     <div><label class="field-label">Body</label><select id="task-add-body-select">${bodies.map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===defaultBody?'selected':''}>${escapeHtml(x.managementName || x.id)}</option>`).join('')}</select></div>
     <div><label class="field-label">制作方法</label><select id="task-add-method"><option value="inhouse">自社制作</option><option value="outsourced">外注</option></select></div>
+    <div><label class="field-label">用途</label><select id="task-add-purpose" class="task-purpose-select"><option value="stock">在庫用</option><option value="order">オーダー品</option></select></div>
     <div class="task-field-wide" style="grid-column:1/-1;"><label class="field-label">Size・数量</label><div class="task-size-entry-grid">${sizes.map(size => `
       <div class="task-size-entry">
         <div class="task-size-entry-name">${escapeHtml(size.managementName)}</div>
@@ -4041,6 +4073,7 @@ function renderProductionTasks(){
   const colorSelect = document.getElementById('task-add-color');
   const designSelect = document.getElementById('task-add-design');
   const methodSelect = document.getElementById('task-add-method');
+  const purposeSelect = document.getElementById('task-add-purpose');
   const bodySelect = document.getElementById('task-add-body-select');
   const capacityLabel = document.getElementById('task-add-capacity');
   let bodyManuallySelected = false;
@@ -4064,11 +4097,12 @@ function renderProductionTasks(){
         el.textContent = `完成品 ${finishedQty} / Body ${bodyQty} / 制作可 ${Math.min(bodyQty, effectiveSheetQty)}`;
       }
     });
-    capacityLabel.textContent = outsourced
+    const orderNote = purposeSelect?.value === 'order' ? ' オーダー品は完了後、完成品在庫へ追加しません。' : '';
+    capacityLabel.textContent = (outsourced
       ? '外注はBody・シート在庫を使用しません'
       : (needsSub
         ? `メイン ${mainSheetQty}枚 / サブ ${subSheetQty}枚。両方1枚ずつ使うため、少ない方を基準に制作可能数を計算します。`
-        : `シート在庫 ${mainSheetQty}枚。各サイズのBody在庫と照合して制作可能数を表示しています。`);
+        : `シート在庫 ${mainSheetQty}枚。各サイズのBody在庫と照合して制作可能数を表示しています。`)) + orderNote;
   };
   refreshResource();
   colorSelect?.addEventListener('change', () => {
@@ -4081,6 +4115,7 @@ function renderProductionTasks(){
   bodySelect?.addEventListener('change', () => { bodyManuallySelected = true; refreshResource(); });
   designSelect?.addEventListener('change', refreshResource);
   methodSelect?.addEventListener('change', refreshResource);
+  purposeSelect?.addEventListener('change', refreshResource);
 
   addBox.querySelectorAll('button[data-task-add-delta]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -4097,6 +4132,7 @@ function renderProductionTasks(){
     const colorId = colorSelect?.value || defaultColor;
     const bodyId = bodySelect?.value || defaultBody;
     const method = document.getElementById('task-add-method')?.value || 'inhouse';
+    const purpose = document.getElementById('task-add-purpose')?.value === 'order' ? 'order' : 'stock';
     if(!bodyId){
       alert('Bodyを選択してください。');
       return;
@@ -4112,7 +4148,7 @@ function renderProductionTasks(){
       return;
     }
     btnEvent.currentTarget.disabled = true;
-    await addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, method);
+    await addProductionTasksBatch(designId, bodyId, colorId, sizeQtyMap, method, purpose);
     renderProductionTasks();
   });
 
@@ -4125,13 +4161,14 @@ function renderProductionTasks(){
     const effectiveSheetStock = needsSub ? Math.min(mainSheetStock, subSheetStock) : mainSheetStock;
     const canSingle = task.method === 'outsourced' ? task.qty : Math.min(task.qty, bodyStock, effectiveSheetStock);
     const canComplete = task.method === 'outsourced' || (task.bodyId && bodyStock >= task.qty && mainSheetStock >= task.qty && subSheetStock >= task.qty);
-    const resourceText = task.method === 'outsourced'
+    const orderText = task.purpose === 'order' ? ' オーダー品のため、完了後は完成品在庫に追加しません。' : '';
+    const resourceText = (task.method === 'outsourced'
       ? '外注のため、完了しても未プリントBody・シート在庫は減りません。'
       : (needsSub
         ? `Body在庫 ${bodyStock}枚 / メイン ${mainSheetStock}枚 / サブ ${subSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`
-        : `Body在庫 ${bodyStock}枚 / シート在庫 ${mainSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`);
-    return `<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span></div>
-      <div class="task-card-controls"><div><label class="field-label">数量</label><div class="task-qty-control"><button class="mini-qty-btn" type="button" data-task-delta="-1" data-task-id="${escapeHtml(task.id)}">−</button><input class="task-qty-input" type="number" min="0" inputmode="numeric" data-task-qty="${escapeHtml(task.id)}" value="${task.qty}"><button class="mini-qty-btn" type="button" data-task-delta="1" data-task-id="${escapeHtml(task.id)}">＋</button></div></div><div><label class="field-label">方法</label><select class="task-method-select" data-task-method="${escapeHtml(task.id)}"><option value="inhouse" ${task.method==='inhouse'?'selected':''}>自社</option><option value="outsourced" ${task.method==='outsourced'?'selected':''}>外注</option></select></div></div>
+        : `Body在庫 ${bodyStock}枚 / シート在庫 ${mainSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`)) + orderText;
+    return `<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div><div class="task-badge-group"><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span>${task.purpose==='order'?'<span class="task-purpose-badge">オーダー品</span>':''}</div></div>
+      <div class="task-card-controls"><div><label class="field-label">数量</label><div class="task-qty-control"><button class="mini-qty-btn" type="button" data-task-delta="-1" data-task-id="${escapeHtml(task.id)}">−</button><input class="task-qty-input" type="number" min="0" inputmode="numeric" data-task-qty="${escapeHtml(task.id)}" value="${task.qty}"><button class="mini-qty-btn" type="button" data-task-delta="1" data-task-id="${escapeHtml(task.id)}">＋</button></div></div><div><label class="field-label">方法</label><select class="task-method-select" data-task-method="${escapeHtml(task.id)}"><option value="inhouse" ${task.method==='inhouse'?'selected':''}>自社</option><option value="outsourced" ${task.method==='outsourced'?'selected':''}>外注</option></select></div><div><label class="field-label">用途</label><select class="task-purpose-select" data-task-purpose="${escapeHtml(task.id)}"><option value="stock" ${task.purpose==='stock'?'selected':''}>在庫用</option><option value="order" ${task.purpose==='order'?'selected':''}>オーダー品</option></select></div></div>
       <div class="task-resource-note ${canComplete?'':'warn'}">${escapeHtml(resourceText)}</div>
       <div class="task-action-row"><button class="task-complete-btn" type="button" data-task-complete="${escapeHtml(task.id)}" ${canComplete?'':'disabled'}>タスク完了</button><button class="task-delete-btn" type="button" data-task-delete="${escapeHtml(task.id)}">タスク削除</button></div>
     </div>`;
@@ -4154,6 +4191,11 @@ function renderProductionTasks(){
   listBox.querySelectorAll('select[data-task-method]').forEach(select => select.addEventListener('change', async () => {
     const id = select.getAttribute('data-task-method');
     await updateProductionTask(id,{method:select.value === 'outsourced' ? 'outsourced' : 'inhouse'});
+    renderProductionTasks();
+  }));
+  listBox.querySelectorAll('select[data-task-purpose]').forEach(select => select.addEventListener('change', async () => {
+    const id = select.getAttribute('data-task-purpose');
+    await updateProductionTask(id,{purpose:select.value === 'order' ? 'order' : 'stock'});
     renderProductionTasks();
   }));
   listBox.querySelectorAll('button[data-task-complete]').forEach(btn => btn.addEventListener('click', async () => {
