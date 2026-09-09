@@ -1215,9 +1215,12 @@
     <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
     <button class="icon-btn" id="add-color-btn">＋</button>
   </div>
-  <div class="section-divider add-row legacy-editor-row">
-    <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
-    <button class="icon-btn" id="add-design-btn">＋</button>
+  <div class="section-divider">
+    <div class="section-title" style="margin-bottom:8px;">Design追加</div>
+    <div class="add-row">
+      <input id="new-design" type="text" placeholder="新しいデザイン名を追加" />
+      <button class="icon-btn" id="add-design-btn" type="button">＋</button>
+    </div>
   </div>
 </section>
 
@@ -1300,7 +1303,7 @@ const STORAGE_KEY = 'tshirt-stock-by-design';
 const UI_STORAGE_KEY = 'tshirt-stock-ui';
 const PRE_V2_BACKUP_KEY = 'tshirt-stock-pre-v2-backup';
 const SCHEMA_VERSION = 2;
-const APP_PATCH_VERSION = '20260909-design-add-fix';
+const APP_PATCH_VERSION = '20260909-design-add-visible';
 const LEGACY_BODY_ID = 'body_unassigned';
 let cloudReady = false;
 let sharedDocument = null;
