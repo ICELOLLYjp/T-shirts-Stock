@@ -851,6 +851,23 @@
     font-weight: 700;
   }
   .task-complete-btn:disabled { opacity: .45; }
+  .task-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .task-delete-btn {
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--danger);
+    border-radius: 9px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
   .task-list { display: grid; gap: 8px; }
   .task-card { margin-bottom: 0; }
   .task-card-head {
@@ -3661,6 +3678,16 @@ async function updateProductionTask(taskIdValue, patch){
   return await saveProductionTasks(tasks);
 }
 
+async function deleteProductionTask(taskIdValue){
+  const task = productionTaskRows().find(x => x.id === taskIdValue);
+  if(!task) return false;
+  const label = `${task.designName} / ${task.bodyName} / ${task.colorName} / ${task.sizeName} × ${task.qty}`;
+  if(!confirm(`${label}\nこの未完了タスクを削除しますか？\n在庫数・未プリントBody・シート在庫は変更しません。`)) return false;
+  const tasks = structuredClone(productionTasks());
+  delete tasks[taskIdValue];
+  return await saveProductionTasks(tasks);
+}
+
 function setFinishedInventoryQtyTree(root, bodyId, designId, colorId, sizeId, qty){
   const next = structuredClone(root || {});
   if(!next[bodyId]) next[bodyId] = {};
@@ -3855,7 +3882,7 @@ function renderProductionTasks(){
     return `<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span></div>
       <div class="task-card-controls"><div><label class="field-label">数量</label><div class="task-qty-control"><button class="mini-qty-btn" type="button" data-task-delta="-1" data-task-id="${escapeHtml(task.id)}">−</button><input class="task-qty-input" type="number" min="0" inputmode="numeric" data-task-qty="${escapeHtml(task.id)}" value="${task.qty}"><button class="mini-qty-btn" type="button" data-task-delta="1" data-task-id="${escapeHtml(task.id)}">＋</button></div></div><div><label class="field-label">方法</label><select class="task-method-select" data-task-method="${escapeHtml(task.id)}"><option value="inhouse" ${task.method==='inhouse'?'selected':''}>自社</option><option value="outsourced" ${task.method==='outsourced'?'selected':''}>外注</option></select></div></div>
       <div class="task-resource-note ${canComplete?'':'warn'}">${escapeHtml(resourceText)}</div>
-      <button class="task-complete-btn" type="button" data-task-complete="${escapeHtml(task.id)}" ${canComplete?'':'disabled'}>タスク完了</button>
+      <div class="task-action-row"><button class="task-complete-btn" type="button" data-task-complete="${escapeHtml(task.id)}" ${canComplete?'':'disabled'}>タスク完了</button><button class="task-delete-btn" type="button" data-task-delete="${escapeHtml(task.id)}">タスク削除</button></div>
     </div>`;
   }).join('')}</div>` : '<div class="task-empty">制作タスクはありません。上の「タスクを追加」から登録してください。</div>';
 
@@ -3881,6 +3908,12 @@ function renderProductionTasks(){
   listBox.querySelectorAll('button[data-task-complete]').forEach(btn => btn.addEventListener('click', async () => {
     btn.disabled = true;
     await completeProductionTask(btn.getAttribute('data-task-complete'));
+  }));
+  listBox.querySelectorAll('button[data-task-delete]').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const deleted = await deleteProductionTask(btn.getAttribute('data-task-delete'));
+    if(!deleted) btn.disabled = false;
+    renderProductionTasks();
   }));
 }
 
