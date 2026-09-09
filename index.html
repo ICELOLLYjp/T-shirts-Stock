@@ -692,6 +692,7 @@
     height: 26px;
     font-size: 12px;
   }
+  .color-body-hint { margin-top: 3px; font-size: 10px; font-weight: 400; color: var(--text-muted); }
   .cell-total {
     display: grid;
     gap: 2px;
@@ -1030,6 +1031,101 @@
     font-size: 11px;
   }
 
+  /* iPad / PC responsive layout */
+  .inventory-shell {
+    width: 100%;
+    min-width: 0;
+  }
+  .inventory-grid {
+    max-width: 100%;
+  }
+
+  @media (min-width: 700px) {
+    body {
+      width: 100%;
+      max-width: 940px;
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+    h1 {
+      font-size: 24px;
+      margin-top: 24px;
+    }
+    .main-nav {
+      gap: 10px;
+    }
+    .main-nav button {
+      height: 48px;
+      font-size: 13px;
+    }
+    .master-tools {
+      gap: 8px;
+    }
+    .inventory-table {
+      width: 100%;
+    }
+    .inventory-table[style] {
+      min-width: 650px !important;
+    }
+    .color-master-head,
+    .color-master-row {
+      grid-template-columns: minmax(140px, 1fr) minmax(160px, 1.1fr) minmax(150px, 0.9fr);
+    }
+    .sheet-row,
+    .sheet-head {
+      grid-template-columns: minmax(220px, 1fr) 150px 150px;
+    }
+    .sheet-qty-control {
+      grid-template-columns: 34px minmax(44px, 1fr) 34px;
+      gap: 6px;
+    }
+    .sheet-qty-control .mini-qty-btn {
+      width: 34px;
+      height: 34px;
+    }
+    .mini-summary {
+      padding: 13px 16px;
+    }
+  }
+
+  @media (min-width: 1100px) {
+    body {
+      max-width: 1160px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+    .main-nav {
+      max-width: 760px;
+    }
+    .stock-summary,
+    .production-summary,
+    .body-settings-panel,
+    .color-settings-panel,
+    .finished-master-bar {
+      border-radius: 14px;
+    }
+    .inventory-table {
+      font-size: 13px;
+    }
+    .inventory-table th,
+    .inventory-table td {
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+  }
+
+  @media (max-width: 699px) {
+    body {
+      width: 100%;
+      max-width: 480px;
+    }
+    .inventory-grid {
+      margin-left: -2px;
+      margin-right: -2px;
+      padding-bottom: 4px;
+    }
+  }
+
 </style>
 </head>
 <body>
@@ -1139,7 +1235,7 @@
 
 <section id="view-blank" class="view-panel" hidden>
   <div class="section-title">未プリントボディ</div>
-  <div class="section-note">まだプリントしていないTシャツの在庫です。Body、Color、Sizeごとに管理します。</div>
+  <div class="section-note">まだプリントしていないTシャツの在庫です。Colorマスターの設定を優先し、ColorからBodyを自動判定します。</div>
   <div class="master-select-row">
     <label class="field-label" for="blank-body-select">Body</label>
     <select id="blank-body-select" class="master-select"></select>
@@ -1212,6 +1308,7 @@ let masterReady = false;
 let masterError = null;
 let cloudSaveTimer = null;
 let colorAuthorityNormalizeBusy = false;
+let blankColorAuthorityNormalizeBusy = false;
 
 const DEFAULT_COLORS = ['ナチュラル','ブラック','グリーン','パープル','ピンク','ベージュ','VB','VN','VP','VG'];
 const DEFAULT_DESIGNS = ['Bigwave','Share the pavement','Gull','Sink','Rays','Cherry','Squids','Whole ocean dive club','See you in water','DEEP','Safe Surf','SALTY'];
@@ -2127,6 +2224,7 @@ function renderColorSettings(){
         return;
       }
       if(inventoryAuthorityActive()) await syncSharedFromMaster();
+      await normalizeBlankInventoryByColorMaster();
       renderCurrentView();
       renderColorSettings();
     });
@@ -2826,6 +2924,101 @@ function renderBodyAssignment(){
   });
 }
 
+
+function bodyIdForColor(colorId, fallbackBodyId = ''){
+  const mapped = masterDocument?.masters?.colors?.[colorId]?.bodyId || '';
+  return mapped || fallbackBodyId || '';
+}
+
+function blankBodyColorFingerprint(tree){
+  const rows = [];
+  Object.entries(tree || {}).forEach(([bodyId, colorTree]) => {
+    Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+      Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+        const qty = Math.max(0, Number(cell?.qty || 0));
+        if(qty > 0) rows.push(`${bodyId}\u241f${colorId}\u241f${sizeId}\u241f${qty}`);
+      });
+    });
+  });
+  return rows.sort().join('\u241e');
+}
+
+function blankBodyColorGrandTotal(tree){
+  let total = 0;
+  Object.values(tree || {}).forEach(colorTree => {
+    Object.values(colorTree || {}).forEach(sizeTree => {
+      Object.values(sizeTree || {}).forEach(cell => {
+        total += Math.max(0, Number(cell?.qty || 0));
+      });
+    });
+  });
+  return total;
+}
+
+function normalizeBodyColorTreeByColorMaster(sourceTree){
+  const source = structuredClone(sourceTree || {});
+  const colors = masterDocument?.masters?.colors || {};
+  const next = {};
+
+  Object.entries(source).forEach(([sourceBodyId, colorTree]) => {
+    Object.entries(colorTree || {}).forEach(([colorId, sizeTree]) => {
+      const mappedBodyId = colors[colorId]?.bodyId || '';
+      const targetBodyId = mappedBodyId || sourceBodyId;
+      if(!targetBodyId) return;
+      if(!next[targetBodyId]) next[targetBodyId] = {};
+      if(!next[targetBodyId][colorId]) next[targetBodyId][colorId] = {};
+
+      Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+        const qty = Math.max(0, Number(cell?.qty || 0));
+        if(qty <= 0) return;
+        const before = Math.max(0, Number(next[targetBodyId][colorId]?.[sizeId]?.qty || 0));
+        next[targetBodyId][colorId][sizeId] = {
+          qty: before + qty,
+          updatedAt: mappedBodyId && mappedBodyId !== sourceBodyId ? nowIso() : (cell?.updatedAt || nowIso())
+        };
+      });
+    });
+  });
+  return next;
+}
+
+async function normalizeBlankInventoryByColorMaster(){
+  if(!masterReady || !masterDocument?.masters?.colors || blankColorAuthorityNormalizeBusy) return false;
+  blankColorAuthorityNormalizeBusy = true;
+  try {
+    const stockBefore = structuredClone(masterDocument.blank_stock || {});
+    const orderBefore = structuredClone(masterDocument.blank_orders || {});
+    const stockAfter = normalizeBodyColorTreeByColorMaster(stockBefore);
+    const orderAfter = normalizeBodyColorTreeByColorMaster(orderBefore);
+
+    if(blankBodyColorGrandTotal(stockBefore) !== blankBodyColorGrandTotal(stockAfter) ||
+       blankBodyColorGrandTotal(orderBefore) !== blankBodyColorGrandTotal(orderAfter)){
+      console.error('Blank Color authority normalization blocked: total mismatch');
+      return false;
+    }
+
+    const stockChanged = blankBodyColorFingerprint(stockBefore) !== blankBodyColorFingerprint(stockAfter);
+    const orderChanged = blankBodyColorFingerprint(orderBefore) !== blankBodyColorFingerprint(orderAfter);
+    if(!stockChanged && !orderChanged) return false;
+
+    masterDocument = {
+      ...masterDocument,
+      blank_stock: stockAfter,
+      blank_orders: orderAfter,
+      blankColorBodyAuthority: true,
+      blankColorBodyNormalizedAt: nowIso()
+    };
+    return await saveMasterData({
+      blank_stock: stockAfter,
+      blank_orders: orderAfter,
+      blankColorBodyAuthority: true,
+      blankColorBodyNormalizedAt: nowIso()
+    });
+  } finally {
+    blankColorAuthorityNormalizeBusy = false;
+  }
+}
+
 function blankTotalForBody(bodyId){
   const body = masterDocument?.blank_stock?.[bodyId] || {};
   let total = 0;
@@ -2877,13 +3070,15 @@ function setNestedQty(root, bodyId, colorId, sizeId, qty){
 }
 
 async function saveBlankQty(bodyId, colorId, sizeId, qty){
-  const next = setNestedQty(masterDocument?.blank_stock || {}, bodyId, colorId, sizeId, qty);
+  const resolvedBodyId = bodyIdForColor(colorId, bodyId);
+  const next = setNestedQty(masterDocument?.blank_stock || {}, resolvedBodyId, colorId, sizeId, qty);
   masterDocument = { ...masterDocument, blank_stock: next };
   return await saveMasterData({ blank_stock: next });
 }
 
 async function saveBlankOrderQty(bodyId, colorId, sizeId, qty){
-  const next = setNestedQty(masterDocument?.blank_orders || {}, bodyId, colorId, sizeId, qty);
+  const resolvedBodyId = bodyIdForColor(colorId, bodyId);
+  const next = setNestedQty(masterDocument?.blank_orders || {}, resolvedBodyId, colorId, sizeId, qty);
   masterDocument = { ...masterDocument, blank_orders: next };
   return await saveMasterData({ blank_orders: next });
 }
@@ -2898,15 +3093,16 @@ function renderBlankStock(){
     renderBlankSummary();
     return;
   }
-  const bodies = masterBodies();
+  const bodies = assignableBodies();
   if(!bodies.some(b => b.id === state.blankBodyId)){
-    state.blankBodyId = bodies.find(b => b.id !== LEGACY_BODY_ID)?.id || bodies[0]?.id || LEGACY_BODY_ID;
+    state.blankBodyId = bodies[0]?.id || '';
   }
   select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.blankBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
 
   const colors = masterColors().filter(color => {
-    if(!state.blankBodyId || state.blankBodyId === LEGACY_BODY_ID) return true;
-    if(color.bodyId === state.blankBodyId) return true;
+    if(!state.blankBodyId) return false;
+    if(color.bodyId) return color.bodyId === state.blankBodyId;
+    // Body未設定Colorだけは、既存データがあるBodyで一時表示する。
     const existingStock = masterDocument?.blank_stock?.[state.blankBodyId]?.[color.id] || {};
     const existingOrder = masterDocument?.blank_orders?.[state.blankBodyId]?.[color.id] || {};
     return [...Object.values(existingStock), ...Object.values(existingOrder)].some(cell => Math.max(0, Number(cell?.qty || 0)) > 0);
@@ -2923,7 +3119,7 @@ function renderBlankStock(){
             const stockTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0)), 0);
             const orderTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0)), 0);
             return `<tr>
-              <td>${escapeHtml(color.managementName)}</td>
+              <td>${escapeHtml(color.managementName)}<div class="color-body-hint">${escapeHtml((masterDocument.masters?.bodies || {})[color.bodyId]?.managementName || 'Body未設定')}</div></td>
               ${sizes.map(size => {
                 const stock = Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0));
                 const order = Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0));
@@ -3622,6 +3818,7 @@ async function init(){
         await ensureKnownColorMappings();
         await inferColorBodyMappings();
         await normalizeFinishedInventoryByColorMaster();
+        await normalizeBlankInventoryByColorMaster();
         await syncSharedFromMaster();
       }
       renderCurrentView();
@@ -3673,6 +3870,7 @@ async function init(){
         if(inventoryAuthorityActive()) setTimeout(async () => {
           await ensureKnownColorMappings();
           await normalizeFinishedInventoryByColorMaster();
+          await normalizeBlankInventoryByColorMaster();
           await syncSharedFromMaster();
         }, 20);
         renderCurrentView();
