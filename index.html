@@ -4056,11 +4056,12 @@ function renderProductionTasks(){
     sizes.forEach(size => {
       const el = addBox.querySelector(`[data-task-capacity-size="${CSS.escape(size.id)}"]`);
       if(!el) return;
+      const finishedQty = Math.max(0, Number(masterInventoryQty(bodyId, designId, colorId, size.id) || 0));
       if(outsourced){
-        el.textContent = '外注';
+        el.textContent = `完成品 ${finishedQty} / 外注`;
       } else {
         const bodyQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[size.id]?.qty || 0));
-        el.textContent = `Body ${bodyQty} / 制作可 ${Math.min(bodyQty, effectiveSheetQty)}`;
+        el.textContent = `完成品 ${finishedQty} / Body ${bodyQty} / 制作可 ${Math.min(bodyQty, effectiveSheetQty)}`;
       }
     });
     capacityLabel.textContent = outsourced
