@@ -1300,6 +1300,7 @@ const STORAGE_KEY = 'tshirt-stock-by-design';
 const UI_STORAGE_KEY = 'tshirt-stock-ui';
 const PRE_V2_BACKUP_KEY = 'tshirt-stock-pre-v2-backup';
 const SCHEMA_VERSION = 2;
+const APP_PATCH_VERSION = '20260909-blank-classification';
 const LEGACY_BODY_ID = 'body_unassigned';
 let cloudReady = false;
 let sharedDocument = null;
@@ -2045,23 +2046,108 @@ function inventoryGrandTotalIncludingLegacy(inventory){
   return total;
 }
 
+function normalizedMasterLabel(value){
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-\/]+/g, '');
+}
+
+function canonicalBodyForKey(key){
+  const candidates = assignableBodies();
+  const aliases = {
+    organic: ['organic', 'オーガニック', 'organiccottontshirt'],
+    vintage: ['vintage', 'ヴィンテージ', 'vintagewashedtshirt'],
+    mij: ['mij', 'madeinjapan', '日本製', 'madeinjapantshirt']
+  }[key] || [];
+
+  return candidates.find(body => {
+    const values = [
+      body.managementName,
+      body.salesName,
+      body.id
+    ].map(normalizedMasterLabel);
+
+    return values.some(value =>
+      aliases.some(alias => {
+        const a = normalizedMasterLabel(alias);
+        return value === a || value.includes(a) || a.includes(value);
+      })
+    );
+  }) || null;
+}
+
+const PINKOI_CANONICAL_COLOR_RULES = [
+  { canonical: 'Natural', body: 'organic', aliases: ['Natural', 'ナチュラル', 'NAT'] },
+  { canonical: 'Black', body: 'organic', aliases: ['Black', 'ブラック', 'BLK'] },
+  { canonical: 'Green', body: 'organic', aliases: ['Green', 'グリーン', 'GRN'] },
+  { canonical: 'Light Purple', body: 'organic', aliases: ['Light Purple', 'パープル', 'LPR'] },
+  { canonical: 'Pink', body: 'organic', aliases: ['Pink', 'ピンク', 'PNK'] },
+  { canonical: 'Beige Grey', body: 'organic', aliases: ['Beige Grey', 'ベージュ', 'BGR'] },
+
+  { canonical: 'Vintage Black', body: 'vintage', aliases: ['Vintage Black', 'VB', 'VBLK'] },
+  { canonical: 'Vintage Navy', body: 'vintage', aliases: ['Vintage Navy', 'VN', 'VNVY'] },
+  { canonical: 'Vintage Light Grey', body: 'vintage', aliases: ['Vintage Light Grey', 'VG', 'VLGR'] },
+  { canonical: 'Vintage Purple', body: 'vintage', aliases: ['Vintage Purple', 'VP', 'VPUR'] },
+
+  { canonical: 'Black JP', body: 'mij', aliases: ['Black JP', 'JP_BLK', 'BlackJP'] },
+  { canonical: 'White JP', body: 'mij', aliases: ['White JP', 'JP_WHT', 'WhiteJP'] },
+  { canonical: 'Grey JP', body: 'mij', aliases: ['Grey JP', 'JP_GRY', 'GreyJP', 'Gray JP'] }
+];
+
+function matchingCanonicalColorRule(color){
+  const values = [
+    color?.managementName,
+    color?.pinkoiName,
+    color?.legacyKey
+  ].map(normalizedMasterLabel).filter(Boolean);
+
+  return PINKOI_CANONICAL_COLOR_RULES.find(rule =>
+    rule.aliases.some(alias => values.includes(normalizedMasterLabel(alias)))
+  ) || null;
+}
+
 async function ensureKnownColorMappings(){
   if(!inventoryAuthorityActive() || !masterDocument?.masters?.colors) return false;
-  const bodies = assignableBodies();
-  const organic = bodies.find(body => String(body.managementName || '').trim().toLowerCase() === 'organic');
-  if(!organic) return false;
+
+  const bodyByKey = {
+    organic: canonicalBodyForKey('organic'),
+    vintage: canonicalBodyForKey('vintage'),
+    mij: canonicalBodyForKey('mij')
+  };
 
   const colorsMap = { ...(masterDocument.masters.colors || {}) };
   let changed = false;
+
   Object.entries(colorsMap).forEach(([colorId, color]) => {
-    const name = String(color.managementName || color.legacyKey || '').trim();
-    // ユーザー確認済み: ナチュラルはすべて Organic。
-    if(name === 'ナチュラル' && color.bodyId !== organic.id){
-      colorsMap[colorId] = { ...color, bodyId: organic.id, updatedAt: nowIso() };
+    const rule = matchingCanonicalColorRule(color);
+    if(!rule) return;
+
+    const body = bodyByKey[rule.body];
+    const nextBodyId = body?.id || color.bodyId || '';
+
+    // Pinkoi Inventory側の名称を正規名として使う。
+    // legacyKey は旧アプリ互換のため変更しない。
+    const nextColor = {
+      ...color,
+      managementName: rule.canonical,
+      pinkoiName: rule.canonical,
+      bodyId: nextBodyId,
+      updatedAt: nowIso()
+    };
+
+    if(
+      nextColor.managementName !== color.managementName ||
+      nextColor.pinkoiName !== color.pinkoiName ||
+      nextColor.bodyId !== color.bodyId
+    ){
+      colorsMap[colorId] = nextColor;
       changed = true;
     }
   });
+
   if(!changed) return false;
+
   const masters = { ...(masterDocument.masters || {}), colors: colorsMap };
   masterDocument = { ...masterDocument, masters };
   return await saveMasterData({ masters });
@@ -3051,8 +3137,17 @@ function renderBlankSummary(){
   const box = document.getElementById('blank-summary');
   if(!box) return;
   const selected = state.blankBodyId || LEGACY_BODY_ID;
+  const allStock = blankGrandTotal();
+  const unclassifiedStock = blankTotalForBody(LEGACY_BODY_ID);
+  const classifiedStock = Math.max(0, allStock - unclassifiedStock);
+
   box.innerHTML = `
-    <div class="mini-summary"><span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
+    <div class="mini-summary">
+      <span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span>
+      <span>全Body <strong>${allStock}</strong> 枚</span>
+      <span>分類済 <strong>${classifiedStock}</strong> 枚</span>
+      <span>未分類 <strong>${unclassifiedStock}</strong> 枚</span>
+    </div>
     <div class="mini-summary"><span>発注数　選択Body <strong>${blankOrderTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>`;
 }
 
