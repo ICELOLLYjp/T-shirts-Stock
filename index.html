@@ -692,6 +692,65 @@
     height: 26px;
     font-size: 12px;
   }
+  .receipt-mini {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 28px;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .receipt-mini label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .receipt-mini input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+  .receipt-mini.disabled { opacity: .35; }
+  .receipt-selection-summary {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .receipt-selection-summary strong { color: var(--text); font-size: 15px; }
+  .receipt-guide {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .receipt-summary-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    margin: 0 0 12px;
+  }
+  .receipt-summary-actions .secondary-btn {
+    min-width: 0;
+    padding: 7px 5px;
+    height: auto;
+    min-height: 40px;
+    line-height: 1.25;
+  }
+  .receipt-summary-actions .primary-receive {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 700;
+  }
   .color-body-hint { margin-top: 3px; font-size: 10px; font-weight: 400; color: var(--text-muted); }
   .cell-total {
     display: grid;
@@ -1087,6 +1146,22 @@
     color: var(--text);
     font-size: 22px;
     line-height: 1.15;
+  }
+  .finished-add-mode {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .finished-add-mode-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .finished-add-mode-note {
+    margin-top: 5px;
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--text-muted);
   }
   .master-badge {
     display: inline-block;
@@ -1573,6 +1648,19 @@
       </div>
       <div id="finished-body-total" class="finished-body-total"></div>
     </div>
+    <div class="finished-add-mode">
+      <div class="finished-add-mode-grid">
+        <div>
+          <label class="field-label" for="finished-add-mode">完成品の＋処理</label>
+          <select id="finished-add-mode" class="master-select">
+            <option value="adjust">在庫調整（完成品だけ増やす）</option>
+            <option value="inhouse_stock">自社制作 → 在庫へ追加</option>
+            <option value="inhouse_order">オーダー品 → 直接納品</option>
+          </select>
+        </div>
+      </div>
+      <div id="finished-add-mode-note" class="finished-add-mode-note"></div>
+    </div>
     <div class="master-sync-note">Body別の完成品在庫を tshirtStock/master に保存し、全Body合計を tshirtStock/shared へ自動同期します。</div>
     <div class="finished-filter-note">選択したBodyの完成品在庫を表示します。Colorの標準Bodyとは別の組み合わせも保持できます。</div>
   </div>
@@ -1615,7 +1703,7 @@
   <div class="section-title">未プリントボディ</div>
   <div class="section-note">まだプリントしていないTシャツの在庫です。Bodyを選び、任意のColor・Sizeを自由に組み合わせて管理します。</div>
   <div class="master-select-row">
-    <label class="field-label" for="blank-body-select">Body</label>
+    <label class="field-label" for="blank-body-select">表示・入荷するBody</label>
     <select id="blank-body-select" class="master-select"></select>
   </div>
   <div id="blank-summary"></div>
@@ -2112,8 +2200,12 @@ let state = {
   activePlanDesign: DEFAULT_DESIGNS[0],
   blankBodyId: LEGACY_BODY_ID,
   assignBodyId: '',
-  finishedBodyId: ''
+  finishedBodyId: '',
+  finishedAddMode: 'adjust'
 };
+
+// 入荷チェックは画面上の一時選択。Firestoreには保存しない。
+let blankReceiptSelection = new Set();
 
 function ensureStock(design){
   const d = state.designs[design];
@@ -2836,6 +2928,76 @@ function renderFinishedBodySelector(){
     ? masterColors().filter(color => color.bodyId === state.finishedBodyId).length
     : masterColors().filter(color => color.bodyId).length;
   totalBox.innerHTML = `<span>${state.finishedBodyId ? '選択Body' : 'すべて'}</span><strong>${bodyTotal}</strong><span>枚</span><span style="margin-left:6px;">Color ${mappedColors}</span>`;
+  renderFinishedAddMode();
+}
+
+function renderFinishedAddMode(){
+  const select = document.getElementById('finished-add-mode');
+  const note = document.getElementById('finished-add-mode-note');
+  if(!select || !note) return;
+  const allowed = ['adjust','inhouse_stock','inhouse_order'];
+  if(!allowed.includes(state.finishedAddMode)) state.finishedAddMode = 'adjust';
+  select.value = state.finishedAddMode;
+  const notes = {
+    adjust: '在庫調整：＋で完成品だけ +1。未プリントBody・シートは変動しません。−は完成品だけ -1 です。',
+    inhouse_stock: '自社制作：＋で完成品 +1、同じBody・Color・Sizeの未プリントBody -1、必要なメイン／サブシート -1。',
+    inhouse_order: 'オーダー品：＋で未プリントBody -1、必要なメイン／サブシート -1。直接納品扱いなので完成品在庫は増やしません。'
+  };
+  note.textContent = notes[state.finishedAddMode];
+}
+
+async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
+  const dm = masterDesignByName(designName);
+  const cm = masterColorByName(colorName);
+  const sm = masterSizeByName(sizeName);
+  if(!dm || !cm || !sm || !bodyId) return false;
+  const mode = ['adjust','inhouse_stock','inhouse_order'].includes(state.finishedAddMode) ? state.finishedAddMode : 'adjust';
+
+  if(mode === 'adjust'){
+    const inventory = structuredClone(masterDocument?.inventory_v2 || {});
+    const current = masterInventoryQty(bodyId, dm.id, cm.id, sm.id);
+    const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1);
+    return await saveMasterInventoryAndSync(next);
+  }
+
+  const blankQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[cm.id]?.[sm.id]?.qty || 0));
+  const mainSheetQty = sheetStockQty(dm.id, 'main');
+  const needsSub = sheetSubEnabled(dm.id);
+  const subSheetQty = needsSub ? sheetStockQty(dm.id, 'sub') : Infinity;
+  if(blankQty < 1 || mainSheetQty < 1 || subSheetQty < 1){
+    const subText = needsSub ? ` / サブ ${subSheetQty}` : '';
+    alert(`制作資材が不足しています。\n未プリントBody ${blankQty} / メインシート ${mainSheetQty}${subText}`);
+    return false;
+  }
+
+  let blank = structuredClone(masterDocument?.blank_stock || {});
+  let sheets = structuredClone(masterDocument?.print_sheets || {});
+  let inventory = structuredClone(masterDocument?.inventory_v2 || {});
+  blank = setNestedQty(blank, bodyId, cm.id, sm.id, blankQty - 1);
+  const sheetItem = { ...(sheets[dm.id] || {}) };
+  const nextMain = mainSheetQty - 1;
+  if(nextMain > 0) sheetItem.qty = nextMain; else delete sheetItem.qty;
+  if(needsSub){
+    const nextSub = subSheetQty - 1;
+    if(nextSub > 0) sheetItem.subQty = nextSub; else delete sheetItem.subQty;
+  }
+  sheetItem.updatedAt = nowIso();
+  if(Math.max(0, Number(sheetItem.qty || 0)) > 0 || Math.max(0, Number(sheetItem.subQty || 0)) > 0) sheets[dm.id] = sheetItem;
+  else delete sheets[dm.id];
+
+  if(mode === 'inhouse_stock'){
+    const current = masterInventoryQty(bodyId, dm.id, cm.id, sm.id);
+    inventory = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1);
+  }
+
+  masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory };
+  const fields = mode === 'inhouse_stock'
+    ? { blank_stock: blank, print_sheets: sheets, inventory_v2: inventory }
+    : { blank_stock: blank, print_sheets: sheets };
+  const saved = await saveMasterData(fields);
+  if(saved === false) return false;
+  if(mode === 'inhouse_stock') await syncSharedFromMaster();
+  return true;
 }
 
 async function saveMasterData(fields){
@@ -3408,24 +3570,71 @@ function blankOrderGrandTotal(){
   return Object.keys(all).reduce((sum, bodyId) => sum + blankOrderTotalForBody(bodyId), 0);
 }
 
+function receiptKey(bodyId, colorId, sizeId){
+  return `${bodyId}|${colorId}|${sizeId}`;
+}
+
+function selectedReceiptEntries(bodyId = state.blankBodyId){
+  const rows = [];
+  const orders = masterDocument?.blank_orders?.[bodyId] || {};
+  Object.entries(orders).forEach(([colorId, sizeTree]) => {
+    Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+      const qty = Math.max(0, Number(cell?.qty || 0));
+      const key = receiptKey(bodyId, colorId, sizeId);
+      if(qty > 0 && blankReceiptSelection.has(key)) rows.push({ key, bodyId, colorId, sizeId, qty });
+      if(qty <= 0) blankReceiptSelection.delete(key);
+    });
+  });
+  return rows;
+}
+
+function selectedReceiptTotal(bodyId = state.blankBodyId){
+  return selectedReceiptEntries(bodyId).reduce((sum, row) => sum + row.qty, 0);
+}
+
+function selectAllCurrentBodyOrders(){
+  const bodyId = state.blankBodyId || '';
+  if(!bodyId) return;
+  // 他Bodyの一時選択は解除し、今見ているBodyだけを選択する。
+  blankReceiptSelection.clear();
+  const orders = masterDocument?.blank_orders?.[bodyId] || {};
+  Object.entries(orders).forEach(([colorId, sizeTree]) => {
+    Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+      if(Math.max(0, Number(cell?.qty || 0)) > 0) blankReceiptSelection.add(receiptKey(bodyId, colorId, sizeId));
+    });
+  });
+}
+
 function renderBlankSummary(){
   const box = document.getElementById('blank-summary');
   if(!box) return;
   const selected = state.blankBodyId || LEGACY_BODY_ID;
+  const bodyName = (masterDocument?.masters?.bodies || {})[selected]?.managementName || '未設定';
   const selectedOrderTotal = blankOrderTotalForBody(selected);
+  const receiptRows = selectedReceiptEntries(selected);
+  const receiptTotal = receiptRows.reduce((sum, row) => sum + row.qty, 0);
   box.innerHTML = `
-    <div class="mini-summary"><span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
-    <div class="mini-summary"><span>発注数　選択Body <strong>${selectedOrderTotal}</strong> 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>
-    <div class="purchase-import-actions" style="margin:0 0 12px;">
-      <button id="receive-selected-body-orders-btn" class="secondary-btn" type="button" ${selectedOrderTotal > 0 ? '' : 'disabled'}>選択Bodyの発注分を一括入荷</button>
+    <div class="mini-summary"><span>未プリント在庫　<strong>${escapeHtml(bodyName)}</strong> ${blankTotalForBody(selected)} 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
+    <div class="mini-summary"><span>発注数　<strong>${escapeHtml(bodyName)}</strong> ${selectedOrderTotal} 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>
+    <div class="receipt-guide">入荷した商品は、下の各サイズにある「入荷対象」にチェックしてください。全部届いた場合は「発注中をすべて選択」でまとめて選べます。</div>
+    <div class="receipt-selection-summary">入荷対象：<strong>${receiptRows.length}</strong> SKU / <strong>${receiptTotal}</strong> 枚</div>
+    <div class="receipt-summary-actions">
+      <button id="select-all-body-orders-btn" class="secondary-btn" type="button" ${selectedOrderTotal > 0 ? '' : 'disabled'}>発注中をすべて選択</button>
+      <button id="clear-body-orders-btn" class="secondary-btn" type="button" ${receiptRows.length ? '' : 'disabled'}>選択解除</button>
+      <button id="receive-selected-body-orders-btn" class="secondary-btn primary-receive" type="button" ${receiptTotal > 0 ? '' : 'disabled'}>選択した発注を入荷<br>${receiptTotal}枚</button>
     </div>`;
 
-  const receiveBtn = document.getElementById('receive-selected-body-orders-btn');
-  if(receiveBtn){
-    receiveBtn.addEventListener('click', async () => {
-      await receiveSelectedBodyOrders();
-    });
-  }
+  document.getElementById('select-all-body-orders-btn')?.addEventListener('click', () => {
+    selectAllCurrentBodyOrders();
+    renderBlankStock();
+  });
+  document.getElementById('clear-body-orders-btn')?.addEventListener('click', () => {
+    blankReceiptSelection.clear();
+    renderBlankStock();
+  });
+  document.getElementById('receive-selected-body-orders-btn')?.addEventListener('click', async () => {
+    await receiveSelectedBodyOrders();
+  });
 }
 
 async function receiveSelectedBodyOrders(){
@@ -3434,35 +3643,29 @@ async function receiveSelectedBodyOrders(){
   if(!bodyId) return false;
   const body = (masterDocument?.masters?.bodies || {})[bodyId];
   const bodyName = body?.managementName || bodyId;
-  const orderTree = structuredClone(masterDocument?.blank_orders?.[bodyId] || {});
-  let total = 0;
-  Object.values(orderTree).forEach(sizeTree => {
-    Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
-  });
+  const selectedRows = selectedReceiptEntries(bodyId);
+  const total = selectedRows.reduce((sum, row) => sum + row.qty, 0);
   if(total <= 0){
-    alert('このBodyには入荷待ちの発注数がありません。');
+    alert('入荷する発注項目にチェックを入れてください。');
     return false;
   }
 
-  if(!confirm(`${bodyName} の発注分 ${total}枚を一括で入荷しますか？\n発注数を0にして、同じBody・Color・Sizeの未プリント在庫へ追加します。`)) return false;
+  if(!confirm(`${bodyName} の選択した発注分 ${total}枚を入荷しますか？\n選択した項目だけ発注数を0にして、同じBody・Color・Sizeの未プリント在庫へ追加します。`)) return false;
 
   let stock = structuredClone(masterDocument?.blank_stock || {});
-  const orders = structuredClone(masterDocument?.blank_orders || {});
-  Object.entries(orderTree).forEach(([colorId, sizeTree]) => {
-    Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
-      const qty = Math.max(0, Number(cell?.qty || 0));
-      if(qty <= 0) return;
-      const current = Math.max(0, Number(stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
-      stock = setNestedQty(stock, bodyId, colorId, sizeId, current + qty);
-    });
+  let orders = structuredClone(masterDocument?.blank_orders || {});
+  selectedRows.forEach(row => {
+    const current = Math.max(0, Number(stock?.[bodyId]?.[row.colorId]?.[row.sizeId]?.qty || 0));
+    stock = setNestedQty(stock, bodyId, row.colorId, row.sizeId, current + row.qty);
+    orders = setNestedQty(orders, bodyId, row.colorId, row.sizeId, 0);
+    blankReceiptSelection.delete(row.key);
   });
-  delete orders[bodyId];
 
   masterDocument = { ...masterDocument, blank_stock: stock, blank_orders: orders };
   const saved = await saveMasterData({ blank_stock: stock, blank_orders: orders });
   if(saved === false) return false;
 
-  alert(`${bodyName} の発注分 ${total}枚を未プリント在庫へ入荷しました。`);
+  alert(`${bodyName} の選択分 ${total}枚を未プリント在庫へ入荷しました。`);
   renderBlankStock();
   return true;
 }
@@ -3538,6 +3741,7 @@ function renderBlankStock(){
                     <button class="mini-qty-btn" type="button" data-blank-delta="1" data-blank-key="${escapeHtml(key)}">＋</button>
                   </div>
                   <div class="order-mini"><span class="order-mini-label">発注</span><input class="order-input" type="number" min="0" inputmode="numeric" data-blank-order="${escapeHtml(key)}" value="${order}"></div>
+                  <div class="receipt-mini ${order > 0 ? '' : 'disabled'}"><label><input type="checkbox" data-receive-order="${escapeHtml(key)}" ${order > 0 && blankReceiptSelection.has(receiptKey(state.blankBodyId, color.id, size.id)) ? 'checked' : ''} ${order > 0 ? '' : 'disabled'}>入荷対象</label></div>
                 </div></td>`;
               }).join('')}
               <td><div class="cell-total"><span>在庫 <strong>${stockTotal}</strong></span><span>発注 <strong>${orderTotal}</strong></span></div></td>
@@ -3558,6 +3762,16 @@ function renderBlankStock(){
       btn.disabled = true;
       await saveBlankQty(bodyId, colorId, sizeId, nextQty);
       renderBlankStock();
+    });
+  });
+
+  box.querySelectorAll('input[data-receive-order]').forEach(input => {
+    input.addEventListener('change', () => {
+      const [colorId, sizeId] = input.getAttribute('data-receive-order').split('|');
+      const key = receiptKey(state.blankBodyId, colorId, sizeId);
+      if(input.checked) blankReceiptSelection.add(key);
+      else blankReceiptSelection.delete(key);
+      renderBlankSummary();
     });
   });
 
@@ -4786,7 +5000,8 @@ function saveLocal(){
       activePlanDesign: state.activePlanDesign,
       blankBodyId: state.blankBodyId,
       assignBodyId: state.assignBodyId,
-      finishedBodyId: state.finishedBodyId
+      finishedBodyId: state.finishedBodyId,
+      finishedAddMode: state.finishedAddMode
     }));
   } catch(e){
     console.error('local save failed', e);
@@ -4988,23 +5203,22 @@ function render(){
         const dm = masterDesignByName(design);
         const cm = masterColorByName(color);
         const sm = masterSizeByName(size);
-        const bodyId = state.finishedBodyId || cm?.bodyId || '';
-        if(!bodyId || !dm || !cm || !sm) return;
-        if(cm.bodyId && cm.bodyId !== bodyId) return;
-        btn.disabled = true;
-        const inventory = structuredClone(masterDocument.inventory_v2 || {});
-        if(!inventory[bodyId]) inventory[bodyId] = {};
-        if(!inventory[bodyId][dm.id]) inventory[bodyId][dm.id] = {};
-        if(!inventory[bodyId][dm.id][cm.id]) inventory[bodyId][dm.id][cm.id] = {};
-        const current = Math.max(0, Number(inventory[bodyId][dm.id][cm.id]?.[sm.id]?.qty || 0));
-        const next = Math.max(0, current + delta);
-        if(next > 0) inventory[bodyId][dm.id][cm.id][sm.id] = { qty: next, updatedAt: nowIso() };
-        else {
-          delete inventory[bodyId][dm.id][cm.id][sm.id];
-          if(!Object.keys(inventory[bodyId][dm.id][cm.id]).length) delete inventory[bodyId][dm.id][cm.id];
-          if(!Object.keys(inventory[bodyId][dm.id]).length) delete inventory[bodyId][dm.id];
+        const bodyId = state.finishedBodyId || '';
+        if(!dm || !cm || !sm) return;
+        if(!bodyId){
+          alert('在庫を変更するBodyを選択してください。「すべて」は閲覧専用です。');
+          return;
         }
-        await saveMasterInventoryAndSync(inventory);
+        btn.disabled = true;
+        if(delta > 0){
+          await applyFinishedPlusMode(design, color, size, bodyId);
+        } else {
+          // − は制作方法に関係なく、完成品在庫の手動減算として扱う。
+          const inventory = structuredClone(masterDocument.inventory_v2 || {});
+          const current = Math.max(0, Number(inventory?.[bodyId]?.[dm.id]?.[cm.id]?.[sm.id]?.qty || 0));
+          const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, Math.max(0, current - 1));
+          await saveMasterInventoryAndSync(next);
+        }
         renderTabs();
         render();
         return;
@@ -5106,8 +5320,15 @@ document.getElementById('finished-body-select').addEventListener('change', e => 
   render();
 });
 
+document.getElementById('finished-add-mode')?.addEventListener('change', e => {
+  state.finishedAddMode = e.target.value;
+  saveLocal();
+  renderFinishedAddMode();
+});
+
 document.getElementById('blank-body-select').addEventListener('change', e => {
   state.blankBodyId = e.target.value;
+  blankReceiptSelection.clear();
   saveLocal();
   renderBlankStock();
 });
@@ -5156,6 +5377,7 @@ async function init(){
   if(!state.blankBodyId) state.blankBodyId = LEGACY_BODY_ID;
   if(state.assignBodyId == null) state.assignBodyId = '';
   if(state.finishedBodyId == null) state.finishedBodyId = '';
+  if(!['adjust','inhouse_stock','inhouse_order'].includes(state.finishedAddMode)) state.finishedAddMode = 'adjust';
   Object.values(state.designs).forEach(d => {
     if(d.starred == null) d.starred = Number(d.priority) === 1;
     if(!d.planned) d.planned = {};
