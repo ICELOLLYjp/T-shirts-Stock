@@ -427,7 +427,7 @@
 
   .main-nav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 6px;
     margin: 0 0 12px;
     position: sticky;
@@ -1579,6 +1579,74 @@
     }
   }
 
+
+  /* 原価マスター */
+  .cost-status {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .cost-status.error { color: var(--danger); background: var(--danger-bg); }
+  .cost-section {
+    margin: 0 0 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .cost-section-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .cost-section-note { font-size: 12px; line-height: 1.55; color: var(--text-secondary); margin-bottom: 12px; }
+  .cost-body-list { display: grid; gap: 10px; }
+  .cost-body-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+  }
+  .cost-body-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; margin-bottom:10px; }
+  .cost-body-name { font-size:15px; font-weight:700; }
+  .cost-current { font-size:13px; color:var(--text-secondary); text-align:right; }
+  .cost-current strong { color:var(--text); font-size:19px; }
+  .cost-form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .cost-form-grid .wide { grid-column: 1 / -1; }
+  .cost-input, .cost-select, .cost-note-input {
+    width:100%; min-width:0; height:40px; padding:0 9px; font-size:14px;
+    border-radius:9px; border:1px solid var(--border); background:var(--card); color:var(--text);
+  }
+  .cost-note-input { height:40px; }
+  .cost-save-btn {
+    width:100%; min-height:40px; border-radius:9px; border:1px solid var(--accent);
+    background:var(--accent-bg); color:var(--accent); font-weight:700; font-size:13px;
+  }
+  .cost-history { margin-top:10px; border-top:1px solid var(--border); padding-top:8px; }
+  .cost-history summary { cursor:pointer; color:var(--accent); font-size:13px; font-weight:600; }
+  .cost-history-row { display:grid; grid-template-columns: 90px 90px minmax(0,1fr); gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .cost-history-row:last-child { border-bottom:none; }
+  .cost-history-amount { font-weight:700; }
+  .cost-history-note { color:var(--text-secondary); overflow-wrap:anywhere; }
+  .cost-sku-picker { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .cost-sku-picker .full { grid-column:1/-1; }
+  .cost-sku-preview { margin:10px 0; padding:10px 12px; border-radius:10px; background:var(--bg); font-size:12px; line-height:1.6; }
+  .cost-method-row { display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+  .cost-method-row:last-child { border-bottom:none; }
+  .cost-method-name { min-width:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cost-sheet-current { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; font-size:12px; color:var(--text-secondary); }
+  .cost-pill { padding:5px 8px; border-radius:999px; background:var(--bg); border:1px solid var(--border); }
+  .cost-plate-list { display:grid; gap:6px; margin-top:10px; }
+  .cost-plate-row { padding:8px 10px; border-radius:9px; background:var(--bg); font-size:12px; line-height:1.5; }
+  .cost-warning { margin-top:8px; padding:9px 10px; border-radius:9px; background:var(--danger-bg); color:var(--danger); font-size:12px; line-height:1.5; }
+  @media (min-width: 700px) {
+    .cost-body-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cost-sku-picker { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cost-sku-picker .full { grid-column:auto; }
+    .cost-form-grid { grid-template-columns: 160px 160px minmax(180px,1fr) 130px; align-items:end; }
+    .cost-form-grid .wide { grid-column:auto; }
+  }
+
 </style>
 </head>
 <body>
@@ -1612,6 +1680,7 @@
   <button type="button" data-view="blank">未プリント</button>
   <button type="button" data-view="sheets">シート</button>
   <button type="button" data-view="plan">制作タスク</button>
+  <button type="button" data-view="costs">原価</button>
 </nav>
 
 <div class="master-tools" style="gap:8px;">
@@ -1737,6 +1806,17 @@
   <div id="task-add-area"></div>
   <div id="plan-app"></div>
 </section>
+
+<section id="view-costs" class="view-panel" hidden>
+  <div class="section-title">原価マスター</div>
+  <div class="section-note">原価はJPYで履歴管理します。在庫数量やDesign・Body・Color・Sizeマスターは変更しません。Sales Managerは保存された原価スケジュールを読み取ります。</div>
+  <div id="cost-status" class="cost-status">原価データを読み込んでいます…</div>
+  <div id="cost-body-app"></div>
+  <div id="cost-production-method-app"></div>
+  <div id="cost-sheet-app"></div>
+  <div id="cost-plate-app"></div>
+  <div id="cost-sku-app"></div>
+</section>
 </div>
 
 <script type="module">
@@ -1746,7 +1826,8 @@ import {
   setPersistence, browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp
+  getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  collection, getDocs
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -4897,8 +4978,450 @@ async function applyPurchaseEmailPreview(){
   return true;
 }
 
+
+
+/* =========================
+   Tシャツ原価マスター
+   Sales Manager互換:
+   products/tshirt/bodyCostHistory
+   productVariants/{variantId}/costHistory
+   ========================= */
+const costMasterState = {
+  loaded: false,
+  loading: false,
+  error: '',
+  bodyHistories: {},
+  sheetHistories: {},
+  plateRows: [],
+  productionMethods: {},
+  skuHistory: [],
+  skuVariantId: '',
+  skuSelection: { designId:'', bodyId:'', colorId:'', sizeId:'' },
+  sheetSelection: { designId:'', part:'main' },
+  plateSelection: { designId:'', part:'main' }
+};
+
+function costTodayKey(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function cleanCostDate(value){
+  const v = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+}
+function cleanCostAmount(value){
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+function costScheduleRows(rows){
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => ({
+      amountJPY: Number(row?.amountJPY || 0),
+      effectiveFrom: cleanCostDate(row?.effectiveFrom),
+      note: String(row?.note || '').trim()
+    }))
+    .filter(row => row.effectiveFrom && Number.isFinite(row.amountJPY) && row.amountJPY >= 0)
+    .sort((a,b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+}
+function currentCostRow(rows, onDate = costTodayKey()){
+  return costScheduleRows(rows).find(row => row.effectiveFrom <= onDate) || null;
+}
+function yen(value){
+  if(value == null || !Number.isFinite(Number(value))) return '未設定';
+  return `¥${Number(value).toLocaleString('ja-JP')}`;
+}
+function masterBodyBusinessKey(body){
+  const text = `${body?.managementName || ''} ${body?.salesName || ''}`.trim().toLocaleLowerCase('en-US');
+  if(text.includes('organic')) return 'Organic';
+  if(text.includes('vintage') || text.includes('pigment') || text.includes('garment')) return 'Vintage';
+  if(text === 'mij' || text.includes('made in japan') || text.includes('japan')) return 'MIJ';
+  return String(body?.managementName || body?.salesName || body?.id || '').trim();
+}
+function businessKeyFromStoredBodyId(value){
+  const raw = String(value || '').trim();
+  if(['Organic','Vintage','MIJ'].includes(raw)) return raw;
+  const body = masterDocument?.masters?.bodies?.[raw];
+  if(body) return masterBodyBusinessKey(body);
+  const low = raw.toLocaleLowerCase('en-US');
+  if(low.includes('organic')) return 'Organic';
+  if(low.includes('vintage') || low.includes('pigment')) return 'Vintage';
+  if(low === 'mij' || low.includes('japan')) return 'MIJ';
+  return raw;
+}
+function costBodyEntries(){
+  const all = masterBodies().filter(body => body.id !== LEGACY_BODY_ID);
+  const order = { Vintage:0, Organic:1, MIJ:2 };
+  const seen = new Set();
+  return all.map(body => ({...body, costKey: masterBodyBusinessKey(body)}))
+    .filter(body => body.costKey && !seen.has(body.costKey) && seen.add(body.costKey))
+    .sort((a,b) => (order[a.costKey] ?? 99) - (order[b.costKey] ?? 99) || a.costKey.localeCompare(b.costKey,'ja'));
+}
+function historiesForBodyCostKey(key){
+  const rows = [];
+  Object.entries(costMasterState.bodyHistories || {}).forEach(([stored, list]) => {
+    if(businessKeyFromStoredBodyId(stored) === key) rows.push(...list);
+  });
+  return rows.sort((a,b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)));
+}
+function bodyScheduleAliases(schedules){
+  const out = {...schedules};
+  costBodyEntries().forEach(body => {
+    const schedule = schedules[body.costKey] || [];
+    out[body.costKey] = schedule;
+    out[body.id] = schedule; // Sales ManagerのSKU variant bodyId互換
+  });
+  return out;
+}
+function historyRowHtml(row){
+  return `<div class="cost-history-row"><span>${escapeHtml(row.effectiveFrom || '')}</span><span class="cost-history-amount">${yen(Number(row.amountJPY || 0))}</span><span class="cost-history-note">${escapeHtml(row.note || '')}</span></div>`;
+}
+async function setHistoryDocPreservingCreatedAt(ref, data){
+  const existing = await getDoc(ref);
+  const createdAt = existing.exists() ? (existing.data()?.createdAt || serverTimestamp()) : serverTimestamp();
+  await setDoc(ref, {...data, createdAt, updatedAt: serverTimestamp()}, {merge:true});
+}
+async function loadCostMasterData(force=false){
+  if(costMasterState.loading) return;
+  if(costMasterState.loaded && !force) return;
+  costMasterState.loading = true;
+  costMasterState.error = '';
+  try {
+    const [bodySnap, sheetSnap, plateSnap, productSnap] = await Promise.all([
+      getDocs(collection(db,'products','tshirt','bodyCostHistory')),
+      getDocs(collection(db,'products','tshirt','sheetCostHistory')),
+      getDocs(collection(db,'products','tshirt','screenPlateCostHistory')),
+      getDoc(doc(db,'products','tshirt'))
+    ]);
+    const bodyHistories = {};
+    bodySnap.docs.forEach(item => {
+      const data = item.data() || {};
+      const key = String(data.bodyId || '').trim();
+      if(!key) return;
+      if(!bodyHistories[key]) bodyHistories[key] = [];
+      bodyHistories[key].push({id:item.id, ...data});
+    });
+    Object.values(bodyHistories).forEach(rows => rows.sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||''))));
+    const sheetHistories = {};
+    sheetSnap.docs.forEach(item => {
+      const data = item.data() || {};
+      const designId = String(data.designId || '').trim();
+      const part = data.part === 'sub' ? 'sub' : 'main';
+      if(!designId) return;
+      const key = `${designId}|${part}`;
+      if(!sheetHistories[key]) sheetHistories[key] = [];
+      sheetHistories[key].push({id:item.id, ...data});
+    });
+    Object.values(sheetHistories).forEach(rows => rows.sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||''))));
+    costMasterState.bodyHistories = bodyHistories;
+    costMasterState.sheetHistories = sheetHistories;
+    costMasterState.plateRows = plateSnap.docs.map(item => ({id:item.id, ...item.data()}))
+      .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')) || String(b.id).localeCompare(String(a.id)));
+    costMasterState.productionMethods = productSnap.exists() ? (productSnap.data()?.productionMethods || {}) : {};
+    costMasterState.loaded = true;
+  } catch(error){
+    console.error('cost master load failed', error);
+    costMasterState.error = `${error.code || 'error'}: ${error.message || error}`;
+  } finally {
+    costMasterState.loading = false;
+  }
+}
+async function rebuildBodyCostCache(){
+  const grouped = {};
+  Object.entries(costMasterState.bodyHistories || {}).forEach(([stored, rows]) => {
+    const key = businessKeyFromStoredBodyId(stored);
+    if(!key) return;
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(...rows);
+  });
+  const schedules = {};
+  Object.entries(grouped).forEach(([key, rows]) => {
+    const byDate = new Map();
+    rows.forEach(row => byDate.set(String(row.effectiveFrom || ''), row));
+    schedules[key] = costScheduleRows([...byDate.values()]);
+  });
+  const productRef = doc(db,'products','tshirt');
+  const snap = await getDoc(productRef);
+  const existing = snap.exists() ? (snap.data()?.bodyCostSchedules || {}) : {};
+  const recognized = new Set(['Organic','Vintage','MIJ', ...costBodyEntries().map(x=>x.id)]);
+  const merged = {};
+  Object.entries(existing).forEach(([key,value]) => { if(!recognized.has(key)) merged[key]=value; });
+  Object.assign(merged, bodyScheduleAliases(schedules));
+  await setDoc(productRef, {
+    name:'T Shirt', category:'tshirt',
+    bodyCostSchedules: merged,
+    bodyCostSchedulesUpdatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }, {merge:true});
+}
+async function saveBodyCostFromCard(costKey, card){
+  const amount = cleanCostAmount(card.querySelector('[data-body-cost-amount]')?.value);
+  const effectiveFrom = cleanCostDate(card.querySelector('[data-body-cost-date]')?.value);
+  const note = String(card.querySelector('[data-body-cost-note]')?.value || '').trim();
+  if(amount === null){ alert('原価を0以上の数値で入力してください。'); return false; }
+  if(!effectiveFrom){ alert('適用開始日を入力してください。'); return false; }
+  const id = `${encodeURIComponent(costKey)}__${effectiveFrom}`;
+  await setHistoryDocPreservingCreatedAt(doc(db,'products','tshirt','bodyCostHistory',id), {
+    scope:'body', category:'tshirt', bodyId:costKey, amountJPY:amount, currency:'JPY', effectiveFrom, note
+  });
+  await loadCostMasterData(true);
+  await rebuildBodyCostCache();
+  return true;
+}
+function createTshirtVariantId(bodyId, designId, colorId, sizeId){
+  const enc = v => encodeURIComponent(String(v || ''));
+  return ['tshirt',enc(bodyId),enc(designId),enc(colorId),enc(sizeId)].join('__');
+}
+function createTshirtInventoryKey(bodyId, designId, colorId, sizeId){
+  const enc = v => encodeURIComponent(String(v || ''));
+  return `tshirt:${enc(bodyId)}|${enc(designId)}|${enc(colorId)}|${enc(sizeId)}`;
+}
+function skuSelectionVariantId(){
+  const x = costMasterState.skuSelection;
+  if(!x.designId || !x.bodyId || !x.colorId || !x.sizeId) return '';
+  return createTshirtVariantId(x.bodyId,x.designId,x.colorId,x.sizeId);
+}
+function skuVariantMetadata(){
+  const x = costMasterState.skuSelection;
+  const bodies = masterDocument?.masters?.bodies || {};
+  const designs = masterDocument?.masters?.designs || {};
+  const colors = masterDocument?.masters?.colors || {};
+  const sizes = masterDocument?.masters?.sizes || {};
+  const body=bodies[x.bodyId], design=designs[x.designId], color=colors[x.colorId], size=sizes[x.sizeId];
+  if(!body || !design || !color || !size) return null;
+  const variantId=createTshirtVariantId(x.bodyId,x.designId,x.colorId,x.sizeId);
+  return {
+    variantId, productId:'tshirt', category:'tshirt', sku:variantId,
+    bodyId:x.bodyId, designId:x.designId, colorId:x.colorId, sizeId:x.sizeId,
+    body:body.managementName || body.salesName || x.bodyId,
+    design:design.managementName || design.legacyKey || design.salesName || x.designId,
+    color:color.managementName || color.legacyKey || color.pinkoiName || x.colorId,
+    size:size.managementName || size.salesName || x.sizeId,
+    sizeOrder:Number(size.order || 999), inventorySource:'tshirt',
+    inventoryKey:createTshirtInventoryKey(x.bodyId,x.designId,x.colorId,x.sizeId),
+    inventoryStatus:'tracked', saleStatus:'active', active:true, source:'tshirtStock/master'
+  };
+}
+async function loadSkuCostHistory(variantId){
+  if(!variantId){ costMasterState.skuHistory=[]; costMasterState.skuVariantId=''; return []; }
+  try {
+    const snap = await getDocs(collection(db,'productVariants',variantId,'costHistory'));
+    const rows = snap.docs.map(item => ({id:item.id,...item.data()}))
+      .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')));
+    costMasterState.skuHistory=rows;
+    costMasterState.skuVariantId=variantId;
+    return rows;
+  } catch(error){
+    console.error('SKU cost load failed',error);
+    costMasterState.skuHistory=[];
+    costMasterState.skuVariantId=variantId;
+    return [];
+  }
+}
+async function saveSkuCost(){
+  const meta = skuVariantMetadata();
+  if(!meta){ alert('Design・Body・Color・Sizeを選択してください。'); return false; }
+  const amount = cleanCostAmount(document.getElementById('sku-cost-amount')?.value);
+  const effectiveFrom = cleanCostDate(document.getElementById('sku-cost-date')?.value);
+  const note = String(document.getElementById('sku-cost-note')?.value || '').trim();
+  const costType = document.getElementById('sku-cost-type')?.value === 'outsourced_all_in' ? 'outsourced_all_in' : 'sku_override';
+  if(amount === null){ alert('原価を0以上の数値で入力してください。'); return false; }
+  if(!effectiveFrom){ alert('適用開始日を入力してください。'); return false; }
+  await setDoc(doc(db,'productVariants',meta.variantId), {...meta, updatedAt:serverTimestamp()}, {merge:true});
+  await setHistoryDocPreservingCreatedAt(doc(db,'productVariants',meta.variantId,'costHistory',effectiveFrom), {
+    scope:'sku', category:'tshirt', variantId:meta.variantId, amountJPY:amount, currency:'JPY', effectiveFrom, note, costType
+  });
+  const rows = await loadSkuCostHistory(meta.variantId);
+  const schedule = costScheduleRows(rows);
+  const latest = schedule[0] || null;
+  await setDoc(doc(db,'productVariants',meta.variantId), {
+    costSchedule:schedule,
+    costScheduleUpdatedAt:serverTimestamp(),
+    latestCostJPY:latest ? latest.amountJPY : null,
+    latestCostEffectiveFrom:latest ? latest.effectiveFrom : '',
+    updatedAt:serverTimestamp()
+  }, {merge:true});
+  return true;
+}
+function sheetHistoryKey(designId,part){ return `${designId}|${part === 'sub' ? 'sub':'main'}`; }
+function sheetCostRows(designId,part){ return costMasterState.sheetHistories[sheetHistoryKey(designId,part)] || []; }
+async function rebuildSheetCostCache(){
+  const schedules={};
+  Object.entries(costMasterState.sheetHistories || {}).forEach(([key,rows]) => {
+    const [designId,part] = key.split('|');
+    if(!schedules[designId]) schedules[designId]={main:[],sub:[]};
+    schedules[designId][part === 'sub' ? 'sub':'main']=costScheduleRows(rows);
+  });
+  await setDoc(doc(db,'products','tshirt'), {
+    sheetCostSchedules:schedules,
+    sheetCostSchedulesUpdatedAt:serverTimestamp(),
+    updatedAt:serverTimestamp()
+  }, {merge:true});
+}
+async function saveSheetCost(){
+  const designId=costMasterState.sheetSelection.designId;
+  const part=costMasterState.sheetSelection.part === 'sub' ? 'sub':'main';
+  const amount=cleanCostAmount(document.getElementById('sheet-cost-amount')?.value);
+  const effectiveFrom=cleanCostDate(document.getElementById('sheet-cost-date')?.value);
+  const note=String(document.getElementById('sheet-cost-note')?.value || '').trim();
+  if(!designId){ alert('Designを選択してください。'); return false; }
+  if(amount===null){ alert('シート原価を0以上の数値で入力してください。'); return false; }
+  if(!effectiveFrom){ alert('適用開始日を入力してください。'); return false; }
+  const id=`${encodeURIComponent(designId)}__${part}__${effectiveFrom}`;
+  await setHistoryDocPreservingCreatedAt(doc(db,'products','tshirt','sheetCostHistory',id), {
+    scope:'sheet',category:'tshirt',designId,part,amountJPY:amount,currency:'JPY',effectiveFrom,note
+  });
+  await loadCostMasterData(true);
+  await rebuildSheetCostCache();
+  return true;
+}
+async function saveProductionMethod(designId,method){
+  const allowed=['sheet','silkscreen','outsourced'];
+  const next={...(costMasterState.productionMethods || {})};
+  next[designId]=allowed.includes(method) ? method : 'sheet';
+  costMasterState.productionMethods=next;
+  await setDoc(doc(db,'products','tshirt'), {
+    productionMethods:next,
+    productionMethodsUpdatedAt:serverTimestamp(),
+    costCompositionPolicy:{
+      sheet:'Body原価 + メインシート原価 + 必要ならサブシート原価',
+      silkscreen:'Body原価。版代は追加・再追加時の一時費用として別記録',
+      outsourced:'SKU個別原価を全て込みの仕入れ原価として使用'
+    },
+    updatedAt:serverTimestamp()
+  }, {merge:true});
+}
+async function savePlateCostEvent(){
+  const designId=costMasterState.plateSelection.designId;
+  const part=costMasterState.plateSelection.part === 'sub' ? 'sub':'main';
+  const amount=cleanCostAmount(document.getElementById('plate-cost-amount')?.value);
+  const effectiveFrom=cleanCostDate(document.getElementById('plate-cost-date')?.value);
+  const note=String(document.getElementById('plate-cost-note')?.value || '').trim();
+  if(!designId){ alert('Designを選択してください。'); return false; }
+  if(amount===null){ alert('版代を0以上の数値で入力してください。'); return false; }
+  if(!effectiveFrom){ alert('発生日を入力してください。'); return false; }
+  const id=`${encodeURIComponent(designId)}__${part}__${effectiveFrom}__${Date.now().toString(36)}`;
+  await setDoc(doc(db,'products','tshirt','screenPlateCostHistory',id), {
+    scope:'screen_plate',category:'tshirt',designId,part,amountJPY:amount,currency:'JPY',effectiveFrom,note,
+    expenseType:'one_time_plate',createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+  });
+  await loadCostMasterData(true);
+  return true;
+}
+function currentBodyBaseCostForInternalId(bodyId){
+  const body=masterDocument?.masters?.bodies?.[bodyId];
+  if(!body) return null;
+  const row=currentCostRow(historiesForBodyCostKey(masterBodyBusinessKey(body)));
+  return row ? row.amountJPY : null;
+}
+function currentSheetCost(designId,part){
+  const row=currentCostRow(sheetCostRows(designId,part));
+  return row ? row.amountJPY : null;
+}
+function renderCostStatus(){
+  const el=document.getElementById('cost-status');
+  if(!el) return;
+  if(costMasterState.loading){ el.className='cost-status'; el.textContent='原価データを読み込んでいます…'; return; }
+  if(costMasterState.error){ el.className='cost-status error'; el.textContent=`原価データを読み込めませんでした。${costMasterState.error}`; return; }
+  el.className='cost-status';
+  el.textContent='原価は履歴として保存されます。同じ適用開始日を保存した場合だけ、その日付の記録を更新します。';
+}
+function renderBodyCostSection(){
+  const box=document.getElementById('cost-body-app'); if(!box) return;
+  const today=costTodayKey();
+  const bodies=costBodyEntries();
+  box.innerHTML=`<div class="cost-section"><div class="cost-section-title">Body原価</div><div class="cost-section-note">基本原価です。Sales Manager互換の products/tshirt/bodyCostHistory と bodyCostSchedules に保存します。</div><div class="cost-body-list">${bodies.map(body=>{
+    const rows=historiesForBodyCostKey(body.costKey);
+    const current=currentCostRow(rows);
+    return `<div class="cost-body-card" data-body-cost-card="${escapeHtml(body.costKey)}"><div class="cost-body-top"><div class="cost-body-name">${escapeHtml(body.costKey)}</div><div class="cost-current">現在適用 <strong>${current ? yen(current.amountJPY):'未設定'}</strong>${current?`<br>${escapeHtml(current.effectiveFrom)}〜`:''}</div></div><div class="cost-form-grid"><div><label class="field-label">原価 JPY</label><input class="cost-input" data-body-cost-amount type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input class="cost-input" data-body-cost-date type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input class="cost-note-input" data-body-cost-note type="text" placeholder="任意"></div><button class="cost-save-btn" data-body-cost-save="${escapeHtml(body.costKey)}" type="button">原価を追加</button></div><details class="cost-history"><summary>履歴を見る（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">履歴はありません。</div>'}</details></div>`;
+  }).join('')}</div></div>`;
+  box.querySelectorAll('button[data-body-cost-save]').forEach(btn=>btn.addEventListener('click',async()=>{
+    btn.disabled=true;
+    try{ await saveBodyCostFromCard(btn.getAttribute('data-body-cost-save'),btn.closest('[data-body-cost-card]')); await renderCostMaster(true); }
+    catch(e){ console.error(e); alert(`原価を保存できませんでした。${e.message||e}`); btn.disabled=false; }
+  }));
+}
+function renderProductionMethodSection(){
+  const box=document.getElementById('cost-production-method-app'); if(!box) return;
+  const designs=masterDesigns();
+  box.innerHTML=`<details class="cost-section"><summary class="cost-section-title">Designごとの制作方法</summary><div class="cost-section-note" style="margin-top:8px;">シート印刷、シルクスクリーン、外注を指定します。Designマスター自体は変更せず、原価用設定として保存します。</div>${designs.map(d=>{const method=costMasterState.productionMethods?.[d.id]||'sheet';return `<div class="cost-method-row"><div class="cost-method-name">${escapeHtml(d.managementName||d.id)}</div><select class="cost-select" data-cost-method="${escapeHtml(d.id)}"><option value="sheet" ${method==='sheet'?'selected':''}>シート印刷</option><option value="silkscreen" ${method==='silkscreen'?'selected':''}>シルクスクリーン</option><option value="outsourced" ${method==='outsourced'?'selected':''}>外注</option></select></div>`;}).join('')}</details>`;
+  box.querySelectorAll('select[data-cost-method]').forEach(sel=>sel.addEventListener('change',async()=>{sel.disabled=true;try{await saveProductionMethod(sel.getAttribute('data-cost-method'),sel.value);renderCostMaster();}catch(e){alert(`制作方法を保存できませんでした。${e.message||e}`);sel.disabled=false;}}));
+}
+function renderSheetCostSection(){
+  const box=document.getElementById('cost-sheet-app'); if(!box) return;
+  const designs=masterDesigns();
+  if(!designs.length){box.innerHTML='';return;}
+  if(!designs.some(d=>d.id===costMasterState.sheetSelection.designId)) costMasterState.sheetSelection.designId=designs[0].id;
+  const designId=costMasterState.sheetSelection.designId;
+  const part=costMasterState.sheetSelection.part;
+  const rows=sheetCostRows(designId,part);
+  const current=currentCostRow(rows);
+  const today=costTodayKey();
+  const main=currentSheetCost(designId,'main'), sub=currentSheetCost(designId,'sub');
+  box.innerHTML=`<details class="cost-section" open><summary class="cost-section-title">シート原価</summary><div class="cost-section-note" style="margin-top:8px;">転写シートなど、1枚制作するたびに消費するシートの単価を履歴管理します。メインとサブを別々に設定できます。</div><div class="cost-sheet-current"><span class="cost-pill">メイン ${main==null?'未設定':yen(main)}</span><span class="cost-pill">サブ ${sub==null?'未設定':yen(sub)}</span></div><div class="cost-form-grid"><div><label class="field-label">Design</label><select id="sheet-cost-design" class="cost-select">${designs.map(d=>`<option value="${escapeHtml(d.id)}" ${d.id===designId?'selected':''}>${escapeHtml(d.managementName||d.id)}</option>`).join('')}</select></div><div><label class="field-label">シート</label><select id="sheet-cost-part" class="cost-select"><option value="main" ${part==='main'?'selected':''}>メイン</option><option value="sub" ${part==='sub'?'selected':''}>サブ</option></select></div><div><label class="field-label">原価 JPY</label><input id="sheet-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sheet-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sheet-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sheet-cost-save" class="cost-save-btn" type="button">シート原価を追加</button></div><details class="cost-history"><summary>選択シートの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">履歴はありません。</div>'}</details></details>`;
+  box.querySelector('#sheet-cost-design')?.addEventListener('change',e=>{costMasterState.sheetSelection.designId=e.target.value;renderCostMaster();});
+  box.querySelector('#sheet-cost-part')?.addEventListener('change',e=>{costMasterState.sheetSelection.part=e.target.value;renderCostMaster();});
+  box.querySelector('#sheet-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await saveSheetCost();await renderCostMaster(true);}catch(err){alert(`シート原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
+}
+function renderPlateCostSection(){
+  const box=document.getElementById('cost-plate-app'); if(!box) return;
+  const designs=masterDesigns(); if(!designs.length){box.innerHTML='';return;}
+  if(!designs.some(d=>d.id===costMasterState.plateSelection.designId)) costMasterState.plateSelection.designId=designs[0].id;
+  const designId=costMasterState.plateSelection.designId, part=costMasterState.plateSelection.part;
+  const rows=costMasterState.plateRows.filter(r=>r.designId===designId && (r.part||'main')===part).slice(0,20);
+  const designMap=masterDocument?.masters?.designs||{};
+  const today=costTodayKey();
+  box.innerHTML=`<details class="cost-section"><summary class="cost-section-title">シルクスクリーン版代</summary><div class="cost-section-note" style="margin-top:8px;">版を追加・再追加したときだけ記録する一時費用です。Tシャツ1枚ごとの原価として自動減算・按分はしません。</div><div class="cost-form-grid"><div><label class="field-label">Design</label><select id="plate-cost-design" class="cost-select">${designs.map(d=>`<option value="${escapeHtml(d.id)}" ${d.id===designId?'selected':''}>${escapeHtml(d.managementName||d.id)}</option>`).join('')}</select></div><div><label class="field-label">版</label><select id="plate-cost-part" class="cost-select"><option value="main" ${part==='main'?'selected':''}>メイン / フロント</option><option value="sub" ${part==='sub'?'selected':''}>サブ / バック</option></select></div><div><label class="field-label">版代 JPY</label><input id="plate-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">発生日</label><input id="plate-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="plate-cost-note" class="cost-note-input" type="text" placeholder="新規版 / 再版など"></div><button id="plate-cost-save" class="cost-save-btn" type="button">版代を記録</button></div><div class="cost-plate-list">${rows.length?rows.map(r=>`<div class="cost-plate-row">${escapeHtml(r.effectiveFrom||'')}　<strong>${yen(Number(r.amountJPY||0))}</strong>　${escapeHtml(r.note||'')}</div>`).join(''):'<div class="section-note">選択したDesign / 版の記録はありません。</div>'}</div></details>`;
+  box.querySelector('#plate-cost-design')?.addEventListener('change',e=>{costMasterState.plateSelection.designId=e.target.value;renderCostMaster();});
+  box.querySelector('#plate-cost-part')?.addEventListener('change',e=>{costMasterState.plateSelection.part=e.target.value;renderCostMaster();});
+  box.querySelector('#plate-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await savePlateCostEvent();await renderCostMaster(true);}catch(err){alert(`版代を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
+}
+async function refreshSkuHistoryAndRender(){
+  const variantId=skuSelectionVariantId();
+  await loadSkuCostHistory(variantId);
+  renderCostSkuSection(false);
+}
+function renderCostSkuSection(loadIfNeeded=true){
+  const box=document.getElementById('cost-sku-app'); if(!box) return;
+  const designs=masterDesigns(), bodies=masterBodies().filter(b=>b.id!==LEGACY_BODY_ID), colors=masterColors(), sizes=masterSizes();
+  if(!designs.length||!bodies.length||!colors.length||!sizes.length){box.innerHTML='';return;}
+  const x=costMasterState.skuSelection;
+  if(!designs.some(v=>v.id===x.designId)) x.designId=designs[0].id;
+  if(!bodies.some(v=>v.id===x.bodyId)) x.bodyId=bodies[0].id;
+  if(!colors.some(v=>v.id===x.colorId)) x.colorId=colors[0].id;
+  if(!sizes.some(v=>v.id===x.sizeId)) x.sizeId=sizes[0].id;
+  const variantId=skuSelectionVariantId();
+  if(loadIfNeeded && costMasterState.skuVariantId!==variantId){ loadSkuCostHistory(variantId).then(()=>renderCostSkuSection(false)); }
+  const rows=costMasterState.skuVariantId===variantId ? costMasterState.skuHistory : [];
+  const current=currentCostRow(rows);
+  const method=costMasterState.productionMethods?.[x.designId]||'sheet';
+  const bodyBase=currentBodyBaseCostForInternalId(x.bodyId);
+  const main=method==='sheet'?currentSheetCost(x.designId,'main'):null;
+  const sub=(method==='sheet' && sheetSubEnabled(x.designId))?currentSheetCost(x.designId,'sub'):null;
+  const componentKnown=bodyBase!=null && (method!=='sheet' || main!=null) && (method!=='sheet' || !sheetSubEnabled(x.designId) || sub!=null);
+  const componentTotal=componentKnown ? bodyBase + (main||0) + (sub||0) : null;
+  const applied=current ? current.amountJPY : componentTotal;
+  const appliedSource=current ? (current.costType==='outsourced_all_in'?'外注仕入原価（SKU）':'SKU個別原価') : (method==='sheet'?'Body＋シート参考原価':'Body参考原価');
+  const today=costTodayKey();
+  box.innerHTML=`<details class="cost-section"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。SKU原価がある場合はBody原価より優先されます。外注品は「全て込みの仕入れ原価」としてここに登録してください。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':method==='silkscreen'?'シルクスクリーン':'外注'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価種別</label><select id="sku-cost-type" class="cost-select"><option value="sku_override">SKU個別原価</option><option value="outsourced_all_in" ${method==='outsourced'?'selected':''}>外注仕入れ（全て込み）</option></select></div><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details><div class="cost-warning">Sales Managerの既存互換キャッシュはSKU個別原価 → Body原価の順で読めます。シート原価・版代を利益計算へ組み込む場合は、Sales Manager側でも sheetCostSchedules / productionMethods を読む対応が必要です。</div></details>`;
+  ['design','body','color','size'].forEach(k=>box.querySelector(`#sku-cost-${k}`)?.addEventListener('change',async e=>{costMasterState.skuSelection[`${k}Id`]=e.target.value;await refreshSkuHistoryAndRender();}));
+  box.querySelector('#sku-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await saveSkuCost();renderCostSkuSection(false);}catch(err){alert(`SKU原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
+}
+async function renderCostMaster(forceLoad=false){
+  if(state.activeView!=='costs') return;
+  renderCostStatus();
+  await loadCostMasterData(forceLoad);
+  renderCostStatus();
+  if(costMasterState.error) return;
+  renderBodyCostSection();
+  renderProductionMethodSection();
+  renderSheetCostSection();
+  renderPlateCostSection();
+  renderCostSkuSection();
+}
+
 function setActiveView(view){
-  const allowed = ['finished','blank','sheets','plan'];
+  const allowed = ['finished','blank','sheets','plan','costs'];
   state.activeView = allowed.includes(view) ? view : 'finished';
   document.querySelectorAll('#main-nav button[data-view]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-view') === state.activeView));
   allowed.forEach(name => {
@@ -4927,6 +5450,8 @@ function renderCurrentView(){
     renderSheetInventory();
   } else if(state.activeView === 'plan'){
     renderProductionTasks();
+  } else if(state.activeView === 'costs'){
+    renderCostMaster();
   }
 }
 
