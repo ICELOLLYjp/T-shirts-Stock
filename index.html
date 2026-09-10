@@ -4992,6 +4992,7 @@ const costMasterState = {
   error: '',
   bodyHistories: {},
   sheetHistories: {},
+  globalSheetHistory: [],
   plateRows: [],
   productionMethods: {},
   skuHistory: [],
@@ -5103,18 +5104,24 @@ async function loadCostMasterData(force=false){
     });
     Object.values(bodyHistories).forEach(rows => rows.sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||''))));
     const sheetHistories = {};
+    const globalSheetHistory = [];
     sheetSnap.docs.forEach(item => {
       const data = item.data() || {};
       const designId = String(data.designId || '').trim();
       const part = data.part === 'sub' ? 'sub' : 'main';
-      if(!designId) return;
+      if(!designId || data.scope === 'sheet_global'){
+        globalSheetHistory.push({id:item.id, ...data});
+        return;
+      }
       const key = `${designId}|${part}`;
       if(!sheetHistories[key]) sheetHistories[key] = [];
       sheetHistories[key].push({id:item.id, ...data});
     });
     Object.values(sheetHistories).forEach(rows => rows.sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||''))));
+    globalSheetHistory.sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')));
     costMasterState.bodyHistories = bodyHistories;
     costMasterState.sheetHistories = sheetHistories;
+    costMasterState.globalSheetHistory = globalSheetHistory;
     costMasterState.plateRows = plateSnap.docs.map(item => ({id:item.id, ...item.data()}))
       .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')) || String(b.id).localeCompare(String(a.id)));
     costMasterState.productionMethods = productSnap.exists() ? (productSnap.data()?.productionMethods || {}) : {};
@@ -5245,31 +5252,44 @@ async function saveSkuCost(){
 }
 function sheetHistoryKey(designId,part){ return `${designId}|${part === 'sub' ? 'sub':'main'}`; }
 function sheetCostRows(designId,part){ return costMasterState.sheetHistories[sheetHistoryKey(designId,part)] || []; }
+function globalSheetCostRows(){
+  const direct = Array.isArray(costMasterState.globalSheetHistory) ? costMasterState.globalSheetHistory : [];
+  if(direct.length) return direct;
+  // 旧Design別シート原価がある場合は表示上だけ引き継ぐ。保存時に共通原価へ移行する。
+  const legacy = Object.values(costMasterState.sheetHistories || {}).flat();
+  const byDate = new Map();
+  legacy
+    .slice()
+    .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')))
+    .forEach(row => {
+      const date = String(row?.effectiveFrom || '');
+      if(date && !byDate.has(date)) byDate.set(date,row);
+    });
+  return [...byDate.values()];
+}
 async function rebuildSheetCostCache(){
+  const schedule = costScheduleRows(globalSheetCostRows());
+  // 既存Sales Manager互換のため、共通単価を各Designのmain/subへ展開したキャッシュも維持する。
   const schedules={};
-  Object.entries(costMasterState.sheetHistories || {}).forEach(([key,rows]) => {
-    const [designId,part] = key.split('|');
-    if(!schedules[designId]) schedules[designId]={main:[],sub:[]};
-    schedules[designId][part === 'sub' ? 'sub':'main']=costScheduleRows(rows);
+  masterDesigns().forEach(design => {
+    schedules[design.id] = { main:schedule, sub:schedule };
   });
   await setDoc(doc(db,'products','tshirt'), {
+    sheetCostSchedule:schedule,
     sheetCostSchedules:schedules,
     sheetCostSchedulesUpdatedAt:serverTimestamp(),
     updatedAt:serverTimestamp()
   }, {merge:true});
 }
 async function saveSheetCost(){
-  const designId=costMasterState.sheetSelection.designId;
-  const part=costMasterState.sheetSelection.part === 'sub' ? 'sub':'main';
   const amount=cleanCostAmount(document.getElementById('sheet-cost-amount')?.value);
   const effectiveFrom=cleanCostDate(document.getElementById('sheet-cost-date')?.value);
   const note=String(document.getElementById('sheet-cost-note')?.value || '').trim();
-  if(!designId){ alert('Designを選択してください。'); return false; }
   if(amount===null){ alert('シート原価を0以上の数値で入力してください。'); return false; }
   if(!effectiveFrom){ alert('適用開始日を入力してください。'); return false; }
-  const id=`${encodeURIComponent(designId)}__${part}__${effectiveFrom}`;
+  const id=`global__${effectiveFrom}`;
   await setHistoryDocPreservingCreatedAt(doc(db,'products','tshirt','sheetCostHistory',id), {
-    scope:'sheet',category:'tshirt',designId,part,amountJPY:amount,currency:'JPY',effectiveFrom,note
+    scope:'sheet_global',category:'tshirt',amountJPY:amount,currency:'JPY',effectiveFrom,note
   });
   await loadCostMasterData(true);
   await rebuildSheetCostCache();
@@ -5315,7 +5335,7 @@ function currentBodyBaseCostForInternalId(bodyId){
   return row ? row.amountJPY : null;
 }
 function currentSheetCost(designId,part){
-  const row=currentCostRow(sheetCostRows(designId,part));
+  const row=currentCostRow(globalSheetCostRows());
   return row ? row.amountJPY : null;
 }
 function renderCostStatus(){
@@ -5344,24 +5364,17 @@ function renderBodyCostSection(){
 function renderProductionMethodSection(){
   const box=document.getElementById('cost-production-method-app'); if(!box) return;
   const designs=masterDesigns();
-  box.innerHTML=`<details class="cost-section"><summary class="cost-section-title">Designごとの制作方法</summary><div class="cost-section-note" style="margin-top:8px;">シート印刷、シルクスクリーン、外注を指定します。Designマスター自体は変更せず、原価用設定として保存します。</div>${designs.map(d=>{const method=costMasterState.productionMethods?.[d.id]||'sheet';return `<div class="cost-method-row"><div class="cost-method-name">${escapeHtml(d.managementName||d.id)}</div><select class="cost-select" data-cost-method="${escapeHtml(d.id)}"><option value="sheet" ${method==='sheet'?'selected':''}>シート印刷</option><option value="silkscreen" ${method==='silkscreen'?'selected':''}>シルクスクリーン</option><option value="outsourced" ${method==='outsourced'?'selected':''}>外注</option></select></div>`;}).join('')}</details>`;
-  box.querySelectorAll('select[data-cost-method]').forEach(sel=>sel.addEventListener('change',async()=>{sel.disabled=true;try{await saveProductionMethod(sel.getAttribute('data-cost-method'),sel.value);renderCostMaster();}catch(e){alert(`制作方法を保存できませんでした。${e.message||e}`);sel.disabled=false;}}));
+  box.innerHTML=`<details class="cost-section" open><summary class="cost-section-title">Designごとの制作方法</summary><div class="cost-section-note" style="margin-top:8px;">シート印刷、シルクスクリーン、外注を指定します。Designマスター自体は変更せず、原価用設定として保存します。</div>${designs.map(d=>{const method=costMasterState.productionMethods?.[d.id]||'sheet';return `<div class="cost-method-row"><div class="cost-method-name">${escapeHtml(d.managementName||d.id)}</div><select class="cost-select" data-cost-method="${escapeHtml(d.id)}"><option value="sheet" ${method==='sheet'?'selected':''}>シート印刷</option><option value="silkscreen" ${method==='silkscreen'?'selected':''}>シルクスクリーン</option><option value="outsourced" ${method==='outsourced'?'selected':''}>外注</option></select></div>`;}).join('')}</details>`;
+  box.querySelectorAll('select[data-cost-method]').forEach(sel=>sel.addEventListener('change',async()=>{sel.disabled=true;try{await saveProductionMethod(sel.getAttribute('data-cost-method'),sel.value);sel.disabled=false;}catch(e){alert(`制作方法を保存できませんでした。${e.message||e}`);sel.disabled=false;}}));
 }
 function renderSheetCostSection(){
   const box=document.getElementById('cost-sheet-app'); if(!box) return;
-  const designs=masterDesigns();
-  if(!designs.length){box.innerHTML='';return;}
-  if(!designs.some(d=>d.id===costMasterState.sheetSelection.designId)) costMasterState.sheetSelection.designId=designs[0].id;
-  const designId=costMasterState.sheetSelection.designId;
-  const part=costMasterState.sheetSelection.part;
-  const rows=sheetCostRows(designId,part);
+  const rows=globalSheetCostRows();
   const current=currentCostRow(rows);
   const today=costTodayKey();
-  const main=currentSheetCost(designId,'main'), sub=currentSheetCost(designId,'sub');
-  box.innerHTML=`<details class="cost-section" open><summary class="cost-section-title">シート原価</summary><div class="cost-section-note" style="margin-top:8px;">転写シートなど、1枚制作するたびに消費するシートの単価を履歴管理します。メインとサブを別々に設定できます。</div><div class="cost-sheet-current"><span class="cost-pill">メイン ${main==null?'未設定':yen(main)}</span><span class="cost-pill">サブ ${sub==null?'未設定':yen(sub)}</span></div><div class="cost-form-grid"><div><label class="field-label">Design</label><select id="sheet-cost-design" class="cost-select">${designs.map(d=>`<option value="${escapeHtml(d.id)}" ${d.id===designId?'selected':''}>${escapeHtml(d.managementName||d.id)}</option>`).join('')}</select></div><div><label class="field-label">シート</label><select id="sheet-cost-part" class="cost-select"><option value="main" ${part==='main'?'selected':''}>メイン</option><option value="sub" ${part==='sub'?'selected':''}>サブ</option></select></div><div><label class="field-label">原価 JPY</label><input id="sheet-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sheet-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sheet-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sheet-cost-save" class="cost-save-btn" type="button">シート原価を追加</button></div><details class="cost-history"><summary>選択シートの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">履歴はありません。</div>'}</details></details>`;
-  box.querySelector('#sheet-cost-design')?.addEventListener('change',e=>{costMasterState.sheetSelection.designId=e.target.value;renderCostMaster();});
-  box.querySelector('#sheet-cost-part')?.addEventListener('change',e=>{costMasterState.sheetSelection.part=e.target.value;renderCostMaster();});
-  box.querySelector('#sheet-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await saveSheetCost();await renderCostMaster(true);}catch(err){alert(`シート原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
+  const usingLegacy=!(costMasterState.globalSheetHistory || []).length && Object.keys(costMasterState.sheetHistories || {}).length>0;
+  box.innerHTML=`<details class="cost-section" open><summary class="cost-section-title">シート原価</summary><div class="cost-section-note" style="margin-top:8px;">シートはDesignによらず共通単価で管理します。フロント＋バックのDesignは同じシート単価を2枚分使用して原価計算します。</div><div class="cost-sheet-current"><span class="cost-pill">現在適用 ${current==null?'未設定':yen(current.amountJPY)}</span></div>${usingLegacy?'<div class="cost-warning">旧Design別シート原価を表示しています。次回この画面で保存すると、共通シート原価として正式に登録されます。旧履歴は削除しません。</div>':''}<div class="cost-form-grid"><div><label class="field-label">原価 JPY / 1シート</label><input id="sheet-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sheet-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sheet-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sheet-cost-save" class="cost-save-btn" type="button">共通シート原価を追加</button></div><details class="cost-history" open><summary>シート原価履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">履歴はありません。</div>'}</details></details>`;
+  box.querySelector('#sheet-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await saveSheetCost();renderSheetCostSection();renderCostSkuSection(false);}catch(err){alert(`シート原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
 }
 function renderPlateCostSection(){
   const box=document.getElementById('cost-plate-app'); if(!box) return;
@@ -5396,14 +5409,14 @@ function renderCostSkuSection(loadIfNeeded=true){
   const current=currentCostRow(rows);
   const method=costMasterState.productionMethods?.[x.designId]||'sheet';
   const bodyBase=currentBodyBaseCostForInternalId(x.bodyId);
-  const main=method==='sheet'?currentSheetCost(x.designId,'main'):null;
-  const sub=(method==='sheet' && sheetSubEnabled(x.designId))?currentSheetCost(x.designId,'sub'):null;
+  const main=method==='sheet'?currentSheetCost():null;
+  const sub=(method==='sheet' && sheetSubEnabled(x.designId))?currentSheetCost():null;
   const componentKnown=bodyBase!=null && (method!=='sheet' || main!=null) && (method!=='sheet' || !sheetSubEnabled(x.designId) || sub!=null);
   const componentTotal=componentKnown ? bodyBase + (main||0) + (sub||0) : null;
   const applied=current ? current.amountJPY : componentTotal;
   const appliedSource=current ? (current.costType==='outsourced_all_in'?'外注仕入原価（SKU）':'SKU個別原価') : (method==='sheet'?'Body＋シート参考原価':'Body参考原価');
   const today=costTodayKey();
-  box.innerHTML=`<details class="cost-section"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。SKU原価がある場合はBody原価より優先されます。外注品は「全て込みの仕入れ原価」としてここに登録してください。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':method==='silkscreen'?'シルクスクリーン':'外注'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価種別</label><select id="sku-cost-type" class="cost-select"><option value="sku_override">SKU個別原価</option><option value="outsourced_all_in" ${method==='outsourced'?'selected':''}>外注仕入れ（全て込み）</option></select></div><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details><div class="cost-warning">Sales Managerの既存互換キャッシュはSKU個別原価 → Body原価の順で読めます。シート原価・版代を利益計算へ組み込む場合は、Sales Manager側でも sheetCostSchedules / productionMethods を読む対応が必要です。</div></details>`;
+  box.innerHTML=`<details class="cost-section"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。SKU原価がある場合はBody原価より優先されます。外注品は「全て込みの仕入れ原価」としてここに登録してください。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':method==='silkscreen'?'シルクスクリーン':'外注'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価種別</label><select id="sku-cost-type" class="cost-select"><option value="sku_override">SKU個別原価</option><option value="outsourced_all_in" ${method==='outsourced'?'selected':''}>外注仕入れ（全て込み）</option></select></div><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details><div class="cost-warning">Sales Managerの既存互換キャッシュはSKU個別原価 → Body原価の順で読めます。シート原価・版代を利益計算へ組み込む場合は、Sales Manager側でも sheetCostSchedule（互換用 sheetCostSchedules も更新）/ productionMethods を読む対応が必要です。</div></details>`;
   ['design','body','color','size'].forEach(k=>box.querySelector(`#sku-cost-${k}`)?.addEventListener('change',async e=>{costMasterState.skuSelection[`${k}Id`]=e.target.value;await refreshSkuHistoryAndRender();}));
   box.querySelector('#sku-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await saveSkuCost();renderCostSkuSection(false);}catch(err){alert(`SKU原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
 }
