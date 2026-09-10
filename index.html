@@ -3412,9 +3412,59 @@ function renderBlankSummary(){
   const box = document.getElementById('blank-summary');
   if(!box) return;
   const selected = state.blankBodyId || LEGACY_BODY_ID;
+  const selectedOrderTotal = blankOrderTotalForBody(selected);
   box.innerHTML = `
     <div class="mini-summary"><span>未プリント在庫　選択Body <strong>${blankTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
-    <div class="mini-summary"><span>発注数　選択Body <strong>${blankOrderTotalForBody(selected)}</strong> 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>`;
+    <div class="mini-summary"><span>発注数　選択Body <strong>${selectedOrderTotal}</strong> 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>
+    <div class="purchase-import-actions" style="margin:0 0 12px;">
+      <button id="receive-selected-body-orders-btn" class="secondary-btn" type="button" ${selectedOrderTotal > 0 ? '' : 'disabled'}>選択Bodyの発注分を一括入荷</button>
+    </div>`;
+
+  const receiveBtn = document.getElementById('receive-selected-body-orders-btn');
+  if(receiveBtn){
+    receiveBtn.addEventListener('click', async () => {
+      await receiveSelectedBodyOrders();
+    });
+  }
+}
+
+async function receiveSelectedBodyOrders(){
+  if(!masterReady || !masterDocument) return false;
+  const bodyId = state.blankBodyId || '';
+  if(!bodyId) return false;
+  const body = (masterDocument?.masters?.bodies || {})[bodyId];
+  const bodyName = body?.managementName || bodyId;
+  const orderTree = structuredClone(masterDocument?.blank_orders?.[bodyId] || {});
+  let total = 0;
+  Object.values(orderTree).forEach(sizeTree => {
+    Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  });
+  if(total <= 0){
+    alert('このBodyには入荷待ちの発注数がありません。');
+    return false;
+  }
+
+  if(!confirm(`${bodyName} の発注分 ${total}枚を一括で入荷しますか？\n発注数を0にして、同じBody・Color・Sizeの未プリント在庫へ追加します。`)) return false;
+
+  let stock = structuredClone(masterDocument?.blank_stock || {});
+  const orders = structuredClone(masterDocument?.blank_orders || {});
+  Object.entries(orderTree).forEach(([colorId, sizeTree]) => {
+    Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
+      const qty = Math.max(0, Number(cell?.qty || 0));
+      if(qty <= 0) return;
+      const current = Math.max(0, Number(stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+      stock = setNestedQty(stock, bodyId, colorId, sizeId, current + qty);
+    });
+  });
+  delete orders[bodyId];
+
+  masterDocument = { ...masterDocument, blank_stock: stock, blank_orders: orders };
+  const saved = await saveMasterData({ blank_stock: stock, blank_orders: orders });
+  if(saved === false) return false;
+
+  alert(`${bodyName} の発注分 ${total}枚を未プリント在庫へ入荷しました。`);
+  renderBlankStock();
+  return true;
 }
 
 function setNestedQty(root, bodyId, colorId, sizeId, qty){
