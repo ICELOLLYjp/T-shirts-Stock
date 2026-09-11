@@ -1630,6 +1630,10 @@
   .cost-history-note { color:var(--text-secondary); overflow-wrap:anywhere; }
   .cost-sku-picker { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
   .cost-sku-picker .full { grid-column:1/-1; }
+  .cost-size-checks { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .cost-size-check { display:flex; align-items:center; gap:7px; min-height:44px; padding:8px 13px; border:1px solid var(--line); border-radius:12px; background:#fff; font-weight:800; cursor:pointer; }
+  .cost-size-check input { width:20px; height:20px; margin:0; }
+  .cost-bulk-result { margin-top:10px; padding:10px 12px; border-radius:12px; background:#f1f7ff; color:#145d9d; font-weight:800; font-size:13px; line-height:1.55; }
   .cost-sku-preview { margin:10px 0; padding:10px 12px; border-radius:10px; background:var(--bg); font-size:12px; line-height:1.6; }
   .cost-method-row { display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
   .cost-method-row:last-child { border-bottom:none; }
@@ -5035,6 +5039,8 @@ const costMasterState = {
   skuHistory: [],
   skuVariantId: '',
   skuSelection: { designId:'', bodyId:'', colorId:'', sizeId:'' },
+  skuBulkSizeIds: [],
+  skuBulkLastResult: null,
   sheetSelection: { designId:'', part:'main' },
   plateSelection: { designId:'', part:'main' }
 };
@@ -5225,26 +5231,29 @@ function skuSelectionVariantId(){
   if(!x.designId || !x.bodyId || !x.colorId || !x.sizeId) return '';
   return createTshirtVariantId(x.bodyId,x.designId,x.colorId,x.sizeId);
 }
-function skuVariantMetadata(){
-  const x = costMasterState.skuSelection;
+function tshirtVariantMetadata(bodyId, designId, colorId, sizeId){
   const bodies = masterDocument?.masters?.bodies || {};
   const designs = masterDocument?.masters?.designs || {};
   const colors = masterDocument?.masters?.colors || {};
   const sizes = masterDocument?.masters?.sizes || {};
-  const body=bodies[x.bodyId], design=designs[x.designId], color=colors[x.colorId], size=sizes[x.sizeId];
+  const body=bodies[bodyId], design=designs[designId], color=colors[colorId], size=sizes[sizeId];
   if(!body || !design || !color || !size) return null;
-  const variantId=createTshirtVariantId(x.bodyId,x.designId,x.colorId,x.sizeId);
+  const variantId=createTshirtVariantId(bodyId,designId,colorId,sizeId);
   return {
     variantId, productId:'tshirt', category:'tshirt', sku:variantId,
-    bodyId:x.bodyId, designId:x.designId, colorId:x.colorId, sizeId:x.sizeId,
-    body:body.managementName || body.salesName || x.bodyId,
-    design:design.managementName || design.legacyKey || design.salesName || x.designId,
-    color:color.managementName || color.legacyKey || color.pinkoiName || x.colorId,
-    size:size.managementName || size.salesName || x.sizeId,
+    bodyId, designId, colorId, sizeId,
+    body:body.managementName || body.salesName || bodyId,
+    design:design.managementName || design.legacyKey || design.salesName || designId,
+    color:color.managementName || color.legacyKey || color.pinkoiName || colorId,
+    size:size.managementName || size.salesName || sizeId,
     sizeOrder:Number(size.order || 999), inventorySource:'tshirt',
-    inventoryKey:createTshirtInventoryKey(x.bodyId,x.designId,x.colorId,x.sizeId),
+    inventoryKey:createTshirtInventoryKey(bodyId,designId,colorId,sizeId),
     inventoryStatus:'tracked', saleStatus:'active', active:true, source:'tshirtStock/master'
   };
+}
+function skuVariantMetadata(){
+  const x = costMasterState.skuSelection;
+  return tshirtVariantMetadata(x.bodyId,x.designId,x.colorId,x.sizeId);
 }
 async function loadSkuCostHistory(variantId){
   if(!variantId){ costMasterState.skuHistory=[]; costMasterState.skuVariantId=''; return []; }
@@ -5271,7 +5280,11 @@ async function saveSkuCost(){
   const costType = document.getElementById('sku-cost-type')?.value === 'outsourced_all_in' ? 'outsourced_all_in' : 'sku_override';
   if(amount === null){ alert('原価を0以上の数値で入力してください。'); return false; }
   if(!effectiveFrom){ alert('適用開始日を入力してください。'); return false; }
-  await setDoc(doc(db,'productVariants',meta.variantId), {...meta, updatedAt:serverTimestamp()}, {merge:true});
+  const variantRef = doc(db,'productVariants',meta.variantId);
+  const variantSnap = await getDoc(variantRef);
+  if(!variantSnap.exists()){
+    await setDoc(variantRef, {...meta, updatedAt:serverTimestamp()}, {merge:true});
+  }
   await setHistoryDocPreservingCreatedAt(doc(db,'productVariants',meta.variantId,'costHistory',effectiveFrom), {
     scope:'sku', category:'tshirt', variantId:meta.variantId, amountJPY:amount, currency:'JPY', effectiveFrom, note, costType
   });
@@ -5285,6 +5298,106 @@ async function saveSkuCost(){
     latestCostEffectiveFrom:latest ? latest.effectiveFrom : '',
     updatedAt:serverTimestamp()
   }, {merge:true});
+  return true;
+}
+
+async function loadVariantCostRowsWithoutState(variantId){
+  const snap = await getDocs(collection(db,'productVariants',variantId,'costHistory'));
+  return snap.docs.map(item => ({id:item.id,...item.data()}))
+    .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')));
+}
+
+async function saveVariantCostRecord(meta, amount, effectiveFrom, note, costType='sku_override', extra={}){
+  const variantRef = doc(db,'productVariants',meta.variantId);
+  const variantSnap = await getDoc(variantRef);
+  if(!variantSnap.exists()){
+    await setDoc(variantRef, {...meta, updatedAt:serverTimestamp()}, {merge:true});
+  }
+  await setHistoryDocPreservingCreatedAt(doc(db,'productVariants',meta.variantId,'costHistory',effectiveFrom), {
+    scope:'sku', category:'tshirt', variantId:meta.variantId, amountJPY:amount, currency:'JPY', effectiveFrom, note, costType, ...extra
+  });
+  const rows = await loadVariantCostRowsWithoutState(meta.variantId);
+  const schedule = costScheduleRows(rows);
+  const latest = schedule[0] || null;
+  await setDoc(doc(db,'productVariants',meta.variantId), {
+    costSchedule:schedule,
+    costScheduleUpdatedAt:serverTimestamp(),
+    latestCostJPY:latest ? latest.amountJPY : null,
+    latestCostEffectiveFrom:latest ? latest.effectiveFrom : '',
+    updatedAt:serverTimestamp()
+  }, {merge:true});
+}
+
+async function outsourcedBulkTargetMetas(designId, bodyId, sizeIds){
+  const wantedSizes = new Set(sizeIds);
+  const colors = new Set();
+  const existingByVariant = new Map();
+
+  // Sales Managerにすでに登録されている同じBody×DesignのColorを最優先で対象にする。
+  const variantSnap = await getDocs(collection(db,'productVariants'));
+  variantSnap.docs.forEach(item => {
+    const data = item.data() || {};
+    if((data.category || data.productId) !== 'tshirt') return;
+    if(String(data.bodyId || '') !== bodyId || String(data.designId || '') !== designId) return;
+    const colorId = String(data.colorId || '');
+    if(colorId) colors.add(colorId);
+    existingByVariant.set(item.id, data);
+  });
+
+  // 完成品在庫に存在するColorも対象候補へ含める。数量0で消えたSKUだけに依存しないため。
+  Object.keys(masterDocument?.inventory_v2?.[bodyId]?.[designId] || {}).forEach(colorId => {
+    if(masterDocument?.masters?.colors?.[colorId]) colors.add(colorId);
+  });
+
+  // まだ販売SKUがない場合は、そのBodyを標準BodyとしているColorから対象を推定する。
+  if(!colors.size){
+    masterColors().forEach(color => {
+      if(String(color?.bodyId || '') === bodyId) colors.add(color.id);
+    });
+  }
+
+  const metas = [];
+  colors.forEach(colorId => {
+    wantedSizes.forEach(sizeId => {
+      const meta = tshirtVariantMetadata(bodyId,designId,colorId,sizeId);
+      if(meta) metas.push(meta);
+    });
+  });
+  return { metas, colorCount: colors.size };
+}
+
+async function saveOutsourcedBulkCost(){
+  const x = costMasterState.skuSelection;
+  const sizeIds = Array.from(document.querySelectorAll('input[data-sku-bulk-size]:checked')).map(input => input.value);
+  costMasterState.skuBulkSizeIds = sizeIds;
+  const amount = cleanCostAmount(document.getElementById('sku-cost-amount')?.value);
+  const effectiveFrom = cleanCostDate(document.getElementById('sku-cost-date')?.value);
+  const note = String(document.getElementById('sku-cost-note')?.value || '').trim();
+  if(!x.designId || !x.bodyId){ alert('DesignとBodyを選択してください。'); return false; }
+  if(!sizeIds.length){ alert('原価を設定するSizeを1つ以上チェックしてください。'); return false; }
+  if(amount === null){ alert('原価を0以上の数値で入力してください。'); return false; }
+  if(!effectiveFrom){ alert('適用開始日を入力してください。'); return false; }
+
+  const targets = await outsourcedBulkTargetMetas(x.designId,x.bodyId,sizeIds);
+  if(!targets.metas.length){
+    alert('このDesign × Bodyに対応するColor / SKUがまだ見つかりません。先に商品または在庫のColorを登録してください。');
+    return false;
+  }
+
+  // 一度に大量通信しすぎないよう、小分けして保存する。
+  const chunkSize = 10;
+  for(let i=0;i<targets.metas.length;i+=chunkSize){
+    const chunk = targets.metas.slice(i,i+chunkSize);
+    await Promise.all(chunk.map(meta => saveVariantCostRecord(
+      meta, amount, effectiveFrom, note, 'outsourced_all_in',
+      { bulkScope:'body_design_size_all_colors', bulkBodyId:x.bodyId, bulkDesignId:x.designId }
+    )));
+  }
+
+  costMasterState.skuBulkLastResult = {
+    designId:x.designId, bodyId:x.bodyId, sizeIds:[...sizeIds], amountJPY:amount, effectiveFrom,
+    variantCount:targets.metas.length, colorCount:targets.colorCount
+  };
   return true;
 }
 function sheetHistoryKey(designId,part){ return `${designId}|${part === 'sub' ? 'sub':'main'}`; }
@@ -5444,24 +5557,58 @@ function renderCostSkuSection(loadIfNeeded=true){
   if(!bodies.some(v=>v.id===x.bodyId)) x.bodyId=bodies[0].id;
   if(!colors.some(v=>v.id===x.colorId)) x.colorId=colors[0].id;
   if(!sizes.some(v=>v.id===x.sizeId)) x.sizeId=sizes[0].id;
+  const method=costMasterState.productionMethods?.[x.designId]||'sheet';
+  const today=costTodayKey();
+
+  if(method==='outsourced'){
+    const validSizeIds = new Set(sizes.map(v=>v.id));
+    costMasterState.skuBulkSizeIds = (costMasterState.skuBulkSizeIds || []).filter(id=>validSizeIds.has(id));
+    if(!costMasterState.skuBulkSizeIds.length) costMasterState.skuBulkSizeIds = sizes.map(v=>v.id);
+    const selected = new Set(costMasterState.skuBulkSizeIds);
+    const last = costMasterState.skuBulkLastResult;
+    const lastHtml = last && last.designId===x.designId && last.bodyId===x.bodyId
+      ? `<div class="cost-bulk-result">保存済み：${last.sizeIds.map(id=>escapeHtml(masterDocument?.masters?.sizes?.[id]?.managementName || id)).join(' / ')}　${yen(last.amountJPY)}<br>${last.colorCount}色・${last.variantCount} SKUへ反映（${escapeHtml(last.effectiveFrom)}〜）</div>`
+      : '';
+    box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">外注仕入れ原価</summary><div class="cost-section-note" style="margin-top:8px;">外注の仕入れ原価は <strong>Design × Body</strong> を決めればColorごとに設定する必要はありません。Sizeだけチェックして、選択したSizeの全Color SKUへ同じ仕入れ原価を一括登録します。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div class="full"><label class="field-label">対象Size</label><div class="cost-size-checks">${sizes.map(v=>`<label class="cost-size-check"><input type="checkbox" data-sku-bulk-size value="${escapeHtml(v.id)}" ${selected.has(v.id)?'checked':''}>${escapeHtml(v.managementName||v.id)}</label>`).join('')}</div></div></div><div class="cost-sku-preview">制作方法: 外注<br>Color: 設定不要（登録済みの全Color SKUへ共通適用）<br>原価: 外注先からの仕入れ代を<strong>全て込み</strong>で登録</div><div class="cost-form-grid"><div><label class="field-label">仕入れ原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">選択Sizeへ仕入れ原価を保存</button></div>${lastHtml}<div class="cost-warning">Firestore上はSales Manager互換を維持するため、選択したSizeの各Colorを productVariants/{variantId}/costHistory に同じ原価で保存します。既存在庫数やSKU IDは変更しません。</div></details>`;
+    box.querySelector('#sku-cost-design')?.addEventListener('change',e=>{costMasterState.skuSelection.designId=e.target.value;costMasterState.skuBulkLastResult=null;renderCostSkuSection(false);});
+    box.querySelector('#sku-cost-body')?.addEventListener('change',e=>{costMasterState.skuSelection.bodyId=e.target.value;costMasterState.skuBulkLastResult=null;renderCostSkuSection(false);});
+    box.querySelectorAll('input[data-sku-bulk-size]').forEach(input=>input.addEventListener('change',()=>{
+      costMasterState.skuBulkSizeIds=Array.from(box.querySelectorAll('input[data-sku-bulk-size]:checked')).map(el=>el.value);
+    }));
+    box.querySelector('#sku-cost-save')?.addEventListener('click',async e=>{
+      e.currentTarget.disabled=true;
+      try{
+        const ok=await saveOutsourcedBulkCost();
+        if(ok) renderCostSkuSection(false);
+        else e.currentTarget.disabled=false;
+      }catch(err){
+        console.error('bulk outsourced cost save failed',err);
+        alert(`仕入れ原価を保存できませんでした。${err.message||err}`);
+        e.currentTarget.disabled=false;
+      }
+    });
+    applyDisclosureState(box);
+    return;
+  }
+
+  // シート印刷・シルクスクリーンで、例外的にSKU単位の上書き原価が必要な場合だけ使う詳細設定。
   const variantId=skuSelectionVariantId();
   if(loadIfNeeded && costMasterState.skuVariantId!==variantId){ loadSkuCostHistory(variantId).then(()=>renderCostSkuSection(false)); }
   const rows=costMasterState.skuVariantId===variantId ? costMasterState.skuHistory : [];
   const current=currentCostRow(rows);
-  const method=costMasterState.productionMethods?.[x.designId]||'sheet';
   const bodyBase=currentBodyBaseCostForInternalId(x.bodyId);
   const main=method==='sheet'?currentSheetCost():null;
   const sub=(method==='sheet' && sheetSubEnabled(x.designId))?currentSheetCost():null;
   const componentKnown=bodyBase!=null && (method!=='sheet' || main!=null) && (method!=='sheet' || !sheetSubEnabled(x.designId) || sub!=null);
   const componentTotal=componentKnown ? bodyBase + (main||0) + (sub||0) : null;
   const applied=current ? current.amountJPY : componentTotal;
-  const appliedSource=current ? (current.costType==='outsourced_all_in'?'外注仕入原価（SKU）':'SKU個別原価') : (method==='sheet'?'Body＋シート参考原価':'Body参考原価');
-  const today=costTodayKey();
-  box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。SKU原価がある場合はBody原価より優先されます。外注品は「全て込みの仕入れ原価」としてここに登録してください。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':method==='silkscreen'?'シルクスクリーン':'外注'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価種別</label><select id="sku-cost-type" class="cost-select"><option value="sku_override">SKU個別原価</option><option value="outsourced_all_in" ${method==='outsourced'?'selected':''}>外注仕入れ（全て込み）</option></select></div><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history" data-disclosure-key="cost-sku-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details><div class="cost-warning">Sales Managerの既存互換キャッシュはSKU個別原価 → Body原価の順で読めます。シート原価・版代を利益計算へ組み込む場合は、Sales Manager側でも sheetCostSchedule（互換用 sheetCostSchedules も更新）/ productionMethods を読む対応が必要です。</div></details>`;
+  const appliedSource=current ? 'SKU個別原価' : (method==='sheet'?'Body＋シート参考原価':'Body参考原価');
+  box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。Body原価とは別に、このSKUだけ原価を上書きしたい場合に使用します。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':'シルクスクリーン'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><input id="sku-cost-type" type="hidden" value="sku_override"><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history" data-disclosure-key="cost-sku-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details></details>`;
   ['design','body','color','size'].forEach(k=>box.querySelector(`#sku-cost-${k}`)?.addEventListener('change',async e=>{costMasterState.skuSelection[`${k}Id`]=e.target.value;await refreshSkuHistoryAndRender();}));
-  box.querySelector('#sku-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await saveSkuCost();renderCostSkuSection(false);}catch(err){alert(`SKU原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
+  box.querySelector('#sku-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{const ok=await saveSkuCost();if(ok)renderCostSkuSection(false);else e.currentTarget.disabled=false;}catch(err){alert(`SKU原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
   applyDisclosureState(box);
 }
+
 async function renderCostMaster(forceLoad=false){
   if(state.activeView!=='costs') return;
   renderCostStatus();
