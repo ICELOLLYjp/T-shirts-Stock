@@ -5049,7 +5049,9 @@ const costMasterState = {
   skuHistory: [],
   skuVariantId: '',
   variantCostCacheMigrationChecked: false,
+  variantCostCacheMigrationRunning: false,
   variantCostCacheMigrationError: '',
+  variantCostCacheMigrationResult: null,
   skuSelection: { designId:'', bodyId:'', colorId:'', sizeId:'' },
   outsourcedSelection: { designId:'', bodyId:'' },
   skuBulkSizeIds: [],
@@ -5377,6 +5379,7 @@ async function rebuildVariantCostCache(variantId, options={}){
     ? new Set(options.targetTypes)
     : new Set(['sku_override','outsourced_all_in']);
   const preserveLegacyIfNoRows = options.preserveLegacyIfNoRows === true;
+  const updateCompatibility = options.updateCompatibility !== false;
   const rows = await loadVariantCostRowsWithoutState(variantId);
   const skuRows = logicalVariantCostRows(rows,'sku_override');
   const outsourcedRows = logicalVariantCostRows(rows,'outsourced_all_in');
@@ -5386,7 +5389,6 @@ async function rebuildVariantCostCache(variantId, options={}){
   const latest = costSchedule[0] || null;
   const update = {
     costCacheSchemaVersion: 2,
-    costScheduleUpdatedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
   if(targetTypes.has('sku_override')){
@@ -5397,41 +5399,149 @@ async function rebuildVariantCostCache(variantId, options={}){
     update.outsourcedCostSchedule = outsourcedCostSchedule;
     update.outsourcedCostScheduleUpdatedAt = serverTimestamp();
   }
-  if(rows.length || !preserveLegacyIfNoRows){
-    update.costSchedule = costSchedule;
-    update.latestCostJPY = latest ? latest.amountJPY : null;
-    update.latestCostEffectiveFrom = latest ? latest.effectiveFrom : '';
+  if(updateCompatibility){
+    update.costScheduleUpdatedAt = serverTimestamp();
+    if(rows.length || !preserveLegacyIfNoRows){
+      update.costSchedule = costSchedule;
+      update.latestCostJPY = latest ? latest.amountJPY : null;
+      update.latestCostEffectiveFrom = latest ? latest.effectiveFrom : '';
+    }
   }
   await setDoc(doc(db,'productVariants',variantId), update, {merge:true});
   return { rows, skuRows, outsourcedRows, skuOverrideCostSchedule, outsourcedCostSchedule, costSchedule };
 }
 
-async function ensureSeparatedVariantCostCaches(){
-  if(costMasterState.variantCostCacheMigrationChecked) return;
-  costMasterState.variantCostCacheMigrationChecked = true;
+const VARIANT_COST_CACHE_REBUILD_VERSION = 'sales_manager_split_cost_cache_v1';
+
+function storedVariantCostCacheRebuildResult(data){
+  const raw = data?.variantCostCacheRebuild || null;
+  if(!raw || raw.version !== VARIANT_COST_CACHE_REBUILD_VERSION || raw.completed !== true) return null;
+  return {
+    version: raw.version,
+    rebuiltSkuCount: Math.max(0, Number(raw.rebuiltSkuCount || 0)),
+    skuOverrideSkuCount: Math.max(0, Number(raw.skuOverrideSkuCount || 0)),
+    outsourcedSkuCount: Math.max(0, Number(raw.outsourcedSkuCount || 0)),
+    verifiedOutsourcedSkuCount: Math.max(0, Number(raw.verifiedOutsourcedSkuCount || 0)),
+    sampleOutsourcedVariantId: String(raw.sampleOutsourcedVariantId || ''),
+    sampleOutsourcedCostSchedule: Array.isArray(raw.sampleOutsourcedCostSchedule) ? raw.sampleOutsourcedCostSchedule : []
+  };
+}
+
+function schedulesEqualForVerification(a,b){
+  return JSON.stringify(costScheduleRows(a)) === JSON.stringify(costScheduleRows(b));
+}
+
+async function ensureSeparatedVariantCostCaches(force=false){
+  if(costMasterState.variantCostCacheMigrationRunning) return costMasterState.variantCostCacheMigrationResult;
+  if(costMasterState.variantCostCacheMigrationChecked && !force) return costMasterState.variantCostCacheMigrationResult;
+  costMasterState.variantCostCacheMigrationRunning = true;
   costMasterState.variantCostCacheMigrationError = '';
   try{
-    const snap = await getDocs(collection(db,'productVariants'));
-    const candidates = snap.docs.filter(item => {
-      const data = item.data() || {};
-      if((data.category || data.productId) !== 'tshirt') return false;
-      if(Number(data.costCacheSchemaVersion || 0) >= 2) return false;
-      return Array.isArray(data.costSchedule) ||
-        data.latestCostJPY != null ||
-        Array.isArray(data.skuOverrideCostSchedule) ||
-        Array.isArray(data.outsourcedCostSchedule);
-    });
-    const chunkSize = 8;
-    for(let i=0;i<candidates.length;i+=chunkSize){
-      const chunk = candidates.slice(i,i+chunkSize);
-      await Promise.all(chunk.map(item => rebuildVariantCostCache(item.id,{
-        targetTypes:['sku_override','outsourced_all_in'],
-        preserveLegacyIfNoRows:true
-      })));
+    const productRef = doc(db,'products','tshirt');
+    const productSnap = await getDoc(productRef);
+    const stored = productSnap.exists() ? storedVariantCostCacheRebuildResult(productSnap.data() || {}) : null;
+    if(stored && !force){
+      costMasterState.variantCostCacheMigrationResult = stored;
+      costMasterState.variantCostCacheMigrationChecked = true;
+      return stored;
     }
+
+    // Tシャツの全SKUを対象に、履歴サブコレクションだけを読み、親SKUの分離キャッシュだけを再構築する。
+    // inventory_v2、SKU ID、各マスター、履歴、Sales Manager売上には触れない。
+    const snap = await getDocs(collection(db,'productVariants'));
+    const variants = snap.docs.filter(item => {
+      const data = item.data() || {};
+      return (data.category || data.productId) === 'tshirt' || String(item.id || '').startsWith('tshirt__');
+    });
+
+    let rebuiltSkuCount = 0;
+    let skuOverrideSkuCount = 0;
+    let outsourcedSkuCount = 0;
+    const expectedOutsourced = new Map();
+    const chunkSize = 8;
+
+    for(let i=0;i<variants.length;i+=chunkSize){
+      const chunk = variants.slice(i,i+chunkSize);
+      const results = await Promise.all(chunk.map(async item => {
+        const rebuilt = await rebuildVariantCostCache(item.id,{
+          targetTypes:['sku_override','outsourced_all_in'],
+          updateCompatibility:false
+        });
+        return { id:item.id, rebuilt };
+      }));
+      results.forEach(({id,rebuilt}) => {
+        rebuiltSkuCount += 1;
+        if(rebuilt.skuOverrideCostSchedule.length) skuOverrideSkuCount += 1;
+        if(rebuilt.outsourcedCostSchedule.length){
+          outsourcedSkuCount += 1;
+          expectedOutsourced.set(id,rebuilt.outsourcedCostSchedule);
+        }
+      });
+    }
+
+    // 外注原価ありのSKUは親ドキュメントを読み直し、実際にoutsourcedCostScheduleが保存されたことを確認する。
+    let verifiedOutsourcedSkuCount = 0;
+    let sampleOutsourcedVariantId = '';
+    let sampleOutsourcedCostSchedule = [];
+    const outsourcedIds = [...expectedOutsourced.keys()];
+    for(let i=0;i<outsourcedIds.length;i+=chunkSize){
+      const ids = outsourcedIds.slice(i,i+chunkSize);
+      const fresh = await Promise.all(ids.map(async variantId => {
+        const variantSnap = await getDoc(doc(db,'productVariants',variantId));
+        return { variantId, data:variantSnap.exists() ? (variantSnap.data() || {}) : null };
+      }));
+      fresh.forEach(({variantId,data}) => {
+        const actual = Array.isArray(data?.outsourcedCostSchedule) ? data.outsourcedCostSchedule : [];
+        const expected = expectedOutsourced.get(variantId) || [];
+        if(schedulesEqualForVerification(actual,expected)){
+          verifiedOutsourcedSkuCount += 1;
+          if(!sampleOutsourcedVariantId){
+            sampleOutsourcedVariantId = variantId;
+            sampleOutsourcedCostSchedule = costScheduleRows(actual);
+          }
+        }
+      });
+    }
+
+    if(verifiedOutsourcedSkuCount !== outsourcedSkuCount){
+      throw new Error(`外注原価キャッシュの保存確認が一致しません。expected=${outsourcedSkuCount}, verified=${verifiedOutsourcedSkuCount}`);
+    }
+
+    const result = {
+      version:VARIANT_COST_CACHE_REBUILD_VERSION,
+      rebuiltSkuCount,
+      skuOverrideSkuCount,
+      outsourcedSkuCount,
+      verifiedOutsourcedSkuCount,
+      sampleOutsourcedVariantId,
+      sampleOutsourcedCostSchedule
+    };
+
+    await setDoc(productRef,{
+      variantCostCacheRebuild:{
+        version:VARIANT_COST_CACHE_REBUILD_VERSION,
+        completed:true,
+        completedAt:serverTimestamp(),
+        rebuiltSkuCount,
+        skuOverrideSkuCount,
+        outsourcedSkuCount,
+        verifiedOutsourcedSkuCount,
+        sampleOutsourcedVariantId,
+        sampleOutsourcedCostSchedule
+      },
+      updatedAt:serverTimestamp()
+    },{merge:true});
+
+    costMasterState.variantCostCacheMigrationResult = result;
+    costMasterState.variantCostCacheMigrationChecked = true;
+    return result;
   }catch(error){
-    console.error('variant cost cache migration failed',error);
+    console.error('variant cost cache full rebuild failed',error);
     costMasterState.variantCostCacheMigrationError = `${error.code || 'error'}: ${error.message || error}`;
+    costMasterState.variantCostCacheMigrationChecked = false;
+    return null;
+  }finally{
+    costMasterState.variantCostCacheMigrationRunning = false;
   }
 }
 
@@ -5852,9 +5962,16 @@ function renderCostStatus(){
   const el=document.getElementById('cost-status');
   if(!el) return;
   if(costMasterState.loading){ el.className='cost-status'; el.textContent='原価データを読み込んでいます…'; return; }
+  if(costMasterState.variantCostCacheMigrationRunning){ el.className='cost-status'; el.textContent='Sales Manager連携用の分離キャッシュを再構築しています…'; return; }
   if(costMasterState.error){ el.className='cost-status error'; el.textContent=`原価データを読み込めませんでした。${costMasterState.error}`; return; }
   if(costMasterState.variantCostCacheMigrationError){ el.className='cost-status error'; el.textContent=`原価は表示できますが、分離キャッシュの再構築に一部失敗しました。${costMasterState.variantCostCacheMigrationError}`; return; }
   el.className='cost-status';
+  const r=costMasterState.variantCostCacheMigrationResult;
+  if(r){
+    const verified = r.outsourcedSkuCount ? ` / 外注保存確認 ${r.verifiedOutsourcedSkuCount}` : '';
+    el.innerHTML=`<div>原価は履歴として保存されます。同じ適用開始日・同じ原価種類を保存した場合だけ、その記録を更新します。</div><div style="margin-top:6px;font-weight:700;">Sales Manager連携キャッシュ再構築済み：${Number(r.rebuiltSkuCount||0)} SKU / SKU個別 ${Number(r.skuOverrideSkuCount||0)} SKU / 外注 ${Number(r.outsourcedSkuCount||0)} SKU${verified}</div>`;
+    return;
+  }
   el.textContent='原価は履歴として保存されます。同じ適用開始日・同じ原価種類を保存した場合だけ、その記録を更新します。';
 }
 function renderBodyCostSection(){
