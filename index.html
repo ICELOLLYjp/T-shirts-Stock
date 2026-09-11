@@ -5408,36 +5408,95 @@ async function loadOutsourcedCostOverview(designId, bodyId){
   costMasterState.outsourcedOverviewLoading = true;
   try{
     const snap = await getDocs(collection(db,'productVariants'));
-    const bySize = {};
-    masterSizes().forEach(size => { bySize[size.id] = []; });
-    snap.docs.forEach(item => {
-      const data = item.data() || {};
-      if((data.category || data.productId) !== 'tshirt') return;
-      if(String(data.designId || '') !== designId || String(data.bodyId || '') !== bodyId) return;
-      const sizeId = String(data.sizeId || '');
-      if(!Object.prototype.hasOwnProperty.call(bySize,sizeId)) return;
-      const current = currentCostRow(data.costSchedule || []);
-      bySize[sizeId].push({ variantId:item.id, current });
-    });
-    const result = {};
-    Object.entries(bySize).forEach(([sizeId, variants]) => {
-      const configured = variants.filter(v => v.current);
-      const signatures = new Map();
-      configured.forEach(v => {
-        const sig = `${Number(v.current.amountJPY)}|${v.current.effectiveFrom}`;
-        if(!signatures.has(sig)) signatures.set(sig,{amountJPY:Number(v.current.amountJPY),effectiveFrom:v.current.effectiveFrom,count:0});
-        signatures.get(sig).count += 1;
+    const variants = snap.docs
+      .map(item => ({ id:item.id, data:item.data() || {} }))
+      .filter(item => {
+        const data = item.data;
+        return (data.category || data.productId) === 'tshirt' &&
+          String(data.designId || '') === designId &&
+          String(data.bodyId || '') === bodyId;
       });
-      const values = [...signatures.values()];
+
+    const bySize = {};
+    masterSizes().forEach(size => {
+      bySize[size.id] = { variantIds:[], rows:[] };
+    });
+
+    variants.forEach(item => {
+      const sizeId = String(item.data.sizeId || '');
+      if(Object.prototype.hasOwnProperty.call(bySize,sizeId)){
+        bySize[sizeId].variantIds.push(item.id);
+      }
+    });
+
+    // 外注仕入れ原価だけを履歴サブコレクションから読む。
+    // SKU個別上書きがあっても、外注原価表示には混ぜない。
+    await Promise.all(variants.map(async item => {
+      const sizeId = String(item.data.sizeId || '');
+      if(!Object.prototype.hasOwnProperty.call(bySize,sizeId)) return;
+      const historySnap = await getDocs(collection(db,'productVariants',item.id,'costHistory'));
+      historySnap.docs.forEach(historyDoc => {
+        const data = historyDoc.data() || {};
+        if(String(data.costType || '') !== 'outsourced_all_in') return;
+        if(String(data.bulkDesignId || '') && String(data.bulkDesignId) !== String(designId)) return;
+        if(String(data.bulkBodyId || '') && String(data.bulkBodyId) !== String(bodyId)) return;
+        const effectiveFrom = cleanCostDate(data.effectiveFrom || historyDoc.id);
+        const amountJPY = cleanCostAmount(data.amountJPY);
+        if(!effectiveFrom || amountJPY === null) return;
+        bySize[sizeId].rows.push({
+          variantId:item.id,
+          effectiveFrom,
+          amountJPY,
+          note:String(data.note || '').trim()
+        });
+      });
+    }));
+
+    const result = {};
+    Object.entries(bySize).forEach(([sizeId, bucket]) => {
+      const variantCount = bucket.variantIds.length;
+      const dateMap = new Map();
+      bucket.rows.forEach(row => {
+        if(!dateMap.has(row.effectiveFrom)) dateMap.set(row.effectiveFrom, []);
+        dateMap.get(row.effectiveFrom).push(row);
+      });
+
+      const history = [...dateMap.entries()]
+        .sort((a,b)=>b[0].localeCompare(a[0]))
+        .map(([effectiveFrom, rows]) => {
+          const signatures = new Map();
+          rows.forEach(row => {
+            const sig = `${Number(row.amountJPY)}|${row.note}`;
+            if(!signatures.has(sig)) signatures.set(sig,{
+              amountJPY:Number(row.amountJPY), note:row.note, count:0
+            });
+            signatures.get(sig).count += 1;
+          });
+          const values = [...signatures.values()];
+          return {
+            effectiveFrom,
+            configuredCount:rows.length,
+            variantCount,
+            status: values.length === 1 ? 'single' : 'mixed',
+            amountJPY: values.length === 1 ? values[0].amountJPY : null,
+            note: values.length === 1 ? values[0].note : '',
+            values
+          };
+        });
+
+      const current = history.find(row => row.effectiveFrom <= costTodayKey()) || null;
       result[sizeId] = {
-        variantCount:variants.length,
-        configuredCount:configured.length,
-        status: configured.length === 0 ? 'missing' : (values.length === 1 ? 'single' : 'mixed'),
-        amountJPY: values.length === 1 ? values[0].amountJPY : null,
-        effectiveFrom: values.length === 1 ? values[0].effectiveFrom : '',
-        values
+        variantCount,
+        configuredCount: current ? current.configuredCount : 0,
+        status: current ? current.status : 'missing',
+        amountJPY: current?.amountJPY ?? null,
+        effectiveFrom: current?.effectiveFrom || '',
+        note: current?.note || '',
+        values: current?.values || [],
+        history
       };
     });
+
     costMasterState.outsourcedOverview = result;
     costMasterState.outsourcedOverviewKey = key;
   }catch(error){
@@ -5468,12 +5527,35 @@ function outsourcedCostOverviewHtml(sizes, designId, bodyId){
     }else if(item.variantCount === 0){
       sub = '対象SKUなし';
     }
-    const deleteButton = item.status === 'single' && item.effectiveFrom
-      ? `<button class="cost-history-delete" type="button" data-delete-outsourced-size="${escapeHtml(size.id)}" data-delete-outsourced-date="${escapeHtml(item.effectiveFrom)}">削除</button>`
-      : '';
-    return `<div class="cost-outsourced-price"><span>${escapeHtml(size.managementName||size.id)}</span><span><strong>${escapeHtml(main)}</strong>${sub?`<small>${escapeHtml(sub)}</small>`:''}${deleteButton}</span></div>`;
+    return `<div class="cost-outsourced-price"><span>${escapeHtml(size.managementName||size.id)}</span><span><strong>${escapeHtml(main)}</strong>${sub?`<small>${escapeHtml(sub)}</small>`:''}</span></div>`;
   }).join('');
   return `<div class="cost-outsourced-overview"><div class="cost-outsourced-overview-title">現在の仕入れ原価</div><div class="cost-outsourced-price-grid">${cards}</div></div>`;
+}
+
+function outsourcedCostHistoryHtml(sizes, designId, bodyId){
+  const key = `${designId}|${bodyId}`;
+  if(costMasterState.outsourcedOverviewKey !== key){
+    return `<details class="cost-history" data-disclosure-key="cost-outsourced-history"><summary>外注仕入れ原価履歴</summary><div class="section-note" style="margin-top:8px;">読み込み中…</div></details>`;
+  }
+  const overview = costMasterState.outsourcedOverview || {};
+  const groups = sizes.map(size => {
+    const item = overview[size.id] || {history:[]};
+    const rows = Array.isArray(item.history) ? item.history : [];
+    if(!rows.length) return '';
+    const rowHtml = rows.map(row => {
+      const amount = row.status === 'single'
+        ? yen(row.amountJPY)
+        : `複数原価 (${row.values.map(v=>yen(v.amountJPY)).join(' / ')})`;
+      const note = row.status === 'single' ? (row.note || '') : 'Color/SKU間で値が一致していません';
+      const countText = row.variantCount && row.configuredCount < row.variantCount
+        ? `${row.configuredCount}/${row.variantCount} SKU`
+        : '';
+      return `<div class="cost-history-row with-delete"><span>${escapeHtml(row.effectiveFrom)}</span><span class="cost-history-amount">${escapeHtml(amount)}</span><span class="cost-history-note">${escapeHtml([note,countText].filter(Boolean).join(' / '))}</span><button class="cost-delete-btn" type="button" data-delete-outsourced-size="${escapeHtml(size.id)}" data-delete-outsourced-date="${escapeHtml(row.effectiveFrom)}">削除</button></div>`;
+    }).join('');
+    return `<div style="margin-top:10px;"><div class="cost-outsourced-overview-title">${escapeHtml(size.managementName||size.id)}</div>${rowHtml}</div>`;
+  }).filter(Boolean).join('');
+  const total = sizes.reduce((sum,size)=>sum + ((overview[size.id]?.history || []).length),0);
+  return `<details class="cost-history" data-disclosure-key="cost-outsourced-history"><summary>外注仕入れ原価履歴（${total}）</summary>${groups || '<div class="section-note" style="margin-top:8px;">履歴はありません。</div>'}</details>`;
 }
 
 async function saveOutsourcedBulkCost(){
@@ -5708,7 +5790,8 @@ function renderOutsourcedCostSection(){
     ? `<div class="cost-bulk-result">保存済み：${last.sizeIds.map(id=>escapeHtml(masterDocument?.masters?.sizes?.[id]?.managementName || id)).join(' / ')}　${yen(last.amountJPY)}<br>${last.colorCount}色・${last.variantCount} SKUへ反映（${escapeHtml(last.effectiveFrom)}〜）</div>`
     : '';
   const overviewHtml = outsourcedCostOverviewHtml(sizes,x.designId,x.bodyId);
-  box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-outsourced"><summary class="cost-section-title">外注仕入れ原価</summary><div class="cost-section-note" style="margin-top:8px;"><strong>仕入れ原価を見る場所はこちらです。</strong> Design × Body を選ぶと、Sizeごとの現在原価を表示します。Colorごとの設定は不要です。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="outsourced-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="outsourced-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div class="full"><label class="field-label">対象Size</label><div class="cost-size-checks">${sizes.map(v=>`<label class="cost-size-check"><input type="checkbox" data-outsourced-bulk-size value="${escapeHtml(v.id)}" ${selected.has(v.id)?'checked':''}>${escapeHtml(v.managementName||v.id)}</label>`).join('')}</div></div></div>${overviewHtml}<div class="cost-sku-preview">原価: 外注先からの仕入れ代を<strong>全て込み</strong>で登録<br>保存単位: Design × Body × Size（Colorは自動で全Color SKUへ反映）</div><div class="cost-form-grid"><div><label class="field-label">仕入れ原価 JPY</label><input id="outsourced-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="outsourced-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="outsourced-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="outsourced-cost-save" class="cost-save-btn" type="button">選択Sizeへ仕入れ原価を保存</button></div>${lastHtml}<div class="cost-warning">表示中の各Sizeにある「削除」は、そのSizeの表示中の適用開始日の外注仕入れ原価だけを削除します。SKU個別上書き、在庫、SKU ID、会計済み売上は変更しません。</div></details>`;
+  const historyHtml = outsourcedCostHistoryHtml(sizes,x.designId,x.bodyId);
+  box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-outsourced"><summary class="cost-section-title">外注仕入れ原価</summary><div class="cost-section-note" style="margin-top:8px;"><strong>仕入れ原価を見る場所はこちらです。</strong> Design × Body を選ぶと、Sizeごとの現在原価を表示します。Colorごとの設定は不要です。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="outsourced-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="outsourced-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div class="full"><label class="field-label">対象Size</label><div class="cost-size-checks">${sizes.map(v=>`<label class="cost-size-check"><input type="checkbox" data-outsourced-bulk-size value="${escapeHtml(v.id)}" ${selected.has(v.id)?'checked':''}>${escapeHtml(v.managementName||v.id)}</label>`).join('')}</div></div></div>${overviewHtml}${historyHtml}<div class="cost-sku-preview">原価: 外注先からの仕入れ代を<strong>全て込み</strong>で登録<br>保存単位: Design × Body × Size（Colorは自動で全Color SKUへ反映）</div><div class="cost-form-grid"><div><label class="field-label">仕入れ原価 JPY</label><input id="outsourced-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="outsourced-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="outsourced-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="outsourced-cost-save" class="cost-save-btn" type="button">選択Sizeへ仕入れ原価を保存</button></div>${lastHtml}<div class="cost-warning">「外注仕入れ原価履歴」の削除は、選択したSize・適用開始日の外注仕入れ原価だけを削除します。SKU個別上書き、在庫、SKU ID、会計済み売上は変更しません。</div></details>`;
 
   box.querySelector('#outsourced-cost-design')?.addEventListener('change',e=>{costMasterState.outsourcedSelection.designId=e.target.value;costMasterState.skuBulkLastResult=null;costMasterState.outsourcedOverviewKey='';costMasterState.outsourcedOverview=null;renderOutsourcedCostSection();});
   box.querySelector('#outsourced-cost-body')?.addEventListener('change',e=>{costMasterState.outsourcedSelection.bodyId=e.target.value;costMasterState.skuBulkLastResult=null;costMasterState.outsourcedOverviewKey='';costMasterState.outsourcedOverview=null;renderOutsourcedCostSection();});
