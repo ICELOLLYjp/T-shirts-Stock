@@ -1634,6 +1634,14 @@
   .cost-size-check { display:flex; align-items:center; gap:7px; min-height:44px; padding:8px 13px; border:1px solid var(--line); border-radius:12px; background:#fff; font-weight:800; cursor:pointer; }
   .cost-size-check input { width:20px; height:20px; margin:0; }
   .cost-bulk-result { margin-top:10px; padding:10px 12px; border-radius:12px; background:#f1f7ff; color:#145d9d; font-weight:800; font-size:13px; line-height:1.55; }
+  .cost-outsourced-overview { margin:10px 0; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--bg); }
+  .cost-outsourced-overview-title { font-size:13px; font-weight:800; margin-bottom:7px; }
+  .cost-outsourced-price-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+  .cost-outsourced-price { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 9px; border-radius:9px; background:var(--card); border:1px solid var(--border); font-size:12px; }
+  .cost-outsourced-price strong { font-size:14px; }
+  .cost-outsourced-price small { display:block; color:var(--text-secondary); font-size:10px; line-height:1.3; text-align:right; }
+  .cost-history-row.with-delete { grid-template-columns:90px 90px minmax(0,1fr) auto; align-items:center; }
+  .cost-delete-btn { min-height:30px; padding:4px 9px; border-radius:8px; border:1px solid var(--danger); background:var(--danger-bg); color:var(--danger); font-size:11px; font-weight:700; }
   .cost-sku-preview { margin:10px 0; padding:10px 12px; border-radius:10px; background:var(--bg); font-size:12px; line-height:1.6; }
   .cost-method-row { display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
   .cost-method-row:last-child { border-bottom:none; }
@@ -1649,6 +1657,7 @@
     .cost-sku-picker .full { grid-column:auto; }
     .cost-form-grid { grid-template-columns: 160px 160px minmax(180px,1fr) 130px; align-items:end; }
     .cost-form-grid .wide { grid-column:auto; }
+    .cost-outsourced-price-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
   }
 
 </style>
@@ -1830,7 +1839,7 @@ import {
   setPersistence, browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
   collection, getDocs
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
@@ -5041,6 +5050,9 @@ const costMasterState = {
   skuSelection: { designId:'', bodyId:'', colorId:'', sizeId:'' },
   skuBulkSizeIds: [],
   skuBulkLastResult: null,
+  outsourcedOverview: null,
+  outsourcedOverviewKey: '',
+  outsourcedOverviewLoading: false,
   sheetSelection: { designId:'', part:'main' },
   plateSelection: { designId:'', part:'main' }
 };
@@ -5119,6 +5131,10 @@ function bodyScheduleAliases(schedules){
 }
 function historyRowHtml(row){
   return `<div class="cost-history-row"><span>${escapeHtml(row.effectiveFrom || '')}</span><span class="cost-history-amount">${yen(Number(row.amountJPY || 0))}</span><span class="cost-history-note">${escapeHtml(row.note || '')}</span></div>`;
+}
+function skuHistoryRowHtml(row, variantId){
+  const date = cleanCostDate(row?.effectiveFrom || row?.id);
+  return `<div class="cost-history-row with-delete"><span>${escapeHtml(date)}</span><span class="cost-history-amount">${yen(Number(row?.amountJPY || 0))}</span><span class="cost-history-note">${escapeHtml(row?.note || '')}</span><button class="cost-delete-btn" type="button" data-delete-sku-cost="${escapeHtml(date)}" data-delete-sku-variant="${escapeHtml(variantId)}">削除</button></div>`;
 }
 async function setHistoryDocPreservingCreatedAt(ref, data){
   const existing = await getDoc(ref);
@@ -5307,6 +5323,33 @@ async function loadVariantCostRowsWithoutState(variantId){
     .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')));
 }
 
+async function rebuildVariantCostCache(variantId){
+  const rows = await loadVariantCostRowsWithoutState(variantId);
+  const schedule = costScheduleRows(rows);
+  const latest = schedule[0] || null;
+  await setDoc(doc(db,'productVariants',variantId), {
+    costSchedule:schedule,
+    costScheduleUpdatedAt:serverTimestamp(),
+    latestCostJPY:latest ? latest.amountJPY : null,
+    latestCostEffectiveFrom:latest ? latest.effectiveFrom : '',
+    updatedAt:serverTimestamp()
+  }, {merge:true});
+  return rows;
+}
+
+async function deleteSkuCostHistoryRecord(variantId, effectiveFrom){
+  const cleanVariantId = String(variantId || '').trim();
+  const date = cleanCostDate(effectiveFrom);
+  if(!cleanVariantId || !date) return false;
+  if(!confirm(`${date} のSKU個別原価を削除します。\n\n原価履歴だけを削除し、在庫・SKU・会計済み売上は変更しません。`)) return false;
+  await deleteDoc(doc(db,'productVariants',cleanVariantId,'costHistory',date));
+  const rows = await rebuildVariantCostCache(cleanVariantId);
+  if(costMasterState.skuVariantId === cleanVariantId){
+    costMasterState.skuHistory = rows;
+  }
+  return true;
+}
+
 async function saveVariantCostRecord(meta, amount, effectiveFrom, note, costType='sku_override', extra={}){
   const variantRef = doc(db,'productVariants',meta.variantId);
   const variantSnap = await getDoc(variantRef);
@@ -5316,16 +5359,7 @@ async function saveVariantCostRecord(meta, amount, effectiveFrom, note, costType
   await setHistoryDocPreservingCreatedAt(doc(db,'productVariants',meta.variantId,'costHistory',effectiveFrom), {
     scope:'sku', category:'tshirt', variantId:meta.variantId, amountJPY:amount, currency:'JPY', effectiveFrom, note, costType, ...extra
   });
-  const rows = await loadVariantCostRowsWithoutState(meta.variantId);
-  const schedule = costScheduleRows(rows);
-  const latest = schedule[0] || null;
-  await setDoc(doc(db,'productVariants',meta.variantId), {
-    costSchedule:schedule,
-    costScheduleUpdatedAt:serverTimestamp(),
-    latestCostJPY:latest ? latest.amountJPY : null,
-    latestCostEffectiveFrom:latest ? latest.effectiveFrom : '',
-    updatedAt:serverTimestamp()
-  }, {merge:true});
+  await rebuildVariantCostCache(meta.variantId);
 }
 
 async function outsourcedBulkTargetMetas(designId, bodyId, sizeIds){
@@ -5366,6 +5400,77 @@ async function outsourcedBulkTargetMetas(designId, bodyId, sizeIds){
   return { metas, colorCount: colors.size };
 }
 
+async function loadOutsourcedCostOverview(designId, bodyId){
+  const key = `${designId}|${bodyId}`;
+  if(costMasterState.outsourcedOverviewLoading) return;
+  costMasterState.outsourcedOverviewLoading = true;
+  try{
+    const snap = await getDocs(collection(db,'productVariants'));
+    const bySize = {};
+    masterSizes().forEach(size => { bySize[size.id] = []; });
+    snap.docs.forEach(item => {
+      const data = item.data() || {};
+      if((data.category || data.productId) !== 'tshirt') return;
+      if(String(data.designId || '') !== designId || String(data.bodyId || '') !== bodyId) return;
+      const sizeId = String(data.sizeId || '');
+      if(!Object.prototype.hasOwnProperty.call(bySize,sizeId)) return;
+      const current = currentCostRow(data.costSchedule || []);
+      bySize[sizeId].push({ variantId:item.id, current });
+    });
+    const result = {};
+    Object.entries(bySize).forEach(([sizeId, variants]) => {
+      const configured = variants.filter(v => v.current);
+      const signatures = new Map();
+      configured.forEach(v => {
+        const sig = `${Number(v.current.amountJPY)}|${v.current.effectiveFrom}`;
+        if(!signatures.has(sig)) signatures.set(sig,{amountJPY:Number(v.current.amountJPY),effectiveFrom:v.current.effectiveFrom,count:0});
+        signatures.get(sig).count += 1;
+      });
+      const values = [...signatures.values()];
+      result[sizeId] = {
+        variantCount:variants.length,
+        configuredCount:configured.length,
+        status: configured.length === 0 ? 'missing' : (values.length === 1 ? 'single' : 'mixed'),
+        amountJPY: values.length === 1 ? values[0].amountJPY : null,
+        effectiveFrom: values.length === 1 ? values[0].effectiveFrom : '',
+        values
+      };
+    });
+    costMasterState.outsourcedOverview = result;
+    costMasterState.outsourcedOverviewKey = key;
+  }catch(error){
+    console.error('outsourced cost overview load failed',error);
+    costMasterState.outsourcedOverview = null;
+    costMasterState.outsourcedOverviewKey = key;
+  }finally{
+    costMasterState.outsourcedOverviewLoading = false;
+  }
+}
+
+function outsourcedCostOverviewHtml(sizes, designId, bodyId){
+  const key = `${designId}|${bodyId}`;
+  if(costMasterState.outsourcedOverviewKey !== key){
+    return `<div class="cost-outsourced-overview"><div class="cost-outsourced-overview-title">現在の仕入れ原価</div><div class="section-note">読み込み中…</div></div>`;
+  }
+  const overview = costMasterState.outsourcedOverview || {};
+  const cards = sizes.map(size => {
+    const item = overview[size.id] || {status:'missing',variantCount:0,configuredCount:0};
+    let main='未設定', sub='';
+    if(item.status === 'single'){
+      main = yen(item.amountJPY);
+      sub = `${item.effectiveFrom}〜`;
+      if(item.configuredCount < item.variantCount) sub += ` / ${item.configuredCount}/${item.variantCount} SKU`;
+    }else if(item.status === 'mixed'){
+      main = '複数原価';
+      sub = item.values.map(v=>yen(v.amountJPY)).join(' / ');
+    }else if(item.variantCount === 0){
+      sub = '対象SKUなし';
+    }
+    return `<div class="cost-outsourced-price"><span>${escapeHtml(size.managementName||size.id)}</span><span><strong>${escapeHtml(main)}</strong>${sub?`<small>${escapeHtml(sub)}</small>`:''}</span></div>`;
+  }).join('');
+  return `<div class="cost-outsourced-overview"><div class="cost-outsourced-overview-title">現在の仕入れ原価</div><div class="cost-outsourced-price-grid">${cards}</div></div>`;
+}
+
 async function saveOutsourcedBulkCost(){
   const x = costMasterState.skuSelection;
   const sizeIds = Array.from(document.querySelectorAll('input[data-sku-bulk-size]:checked')).map(input => input.value);
@@ -5398,6 +5503,8 @@ async function saveOutsourcedBulkCost(){
     designId:x.designId, bodyId:x.bodyId, sizeIds:[...sizeIds], amountJPY:amount, effectiveFrom,
     variantCount:targets.metas.length, colorCount:targets.colorCount
   };
+  costMasterState.outsourcedOverviewKey = '';
+  costMasterState.outsourcedOverview = null;
   return true;
 }
 function sheetHistoryKey(designId,part){ return `${designId}|${part === 'sub' ? 'sub':'main'}`; }
@@ -5569,9 +5676,10 @@ function renderCostSkuSection(loadIfNeeded=true){
     const lastHtml = last && last.designId===x.designId && last.bodyId===x.bodyId
       ? `<div class="cost-bulk-result">保存済み：${last.sizeIds.map(id=>escapeHtml(masterDocument?.masters?.sizes?.[id]?.managementName || id)).join(' / ')}　${yen(last.amountJPY)}<br>${last.colorCount}色・${last.variantCount} SKUへ反映（${escapeHtml(last.effectiveFrom)}〜）</div>`
       : '';
-    box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">外注仕入れ原価</summary><div class="cost-section-note" style="margin-top:8px;">外注の仕入れ原価は <strong>Design × Body</strong> を決めればColorごとに設定する必要はありません。Sizeだけチェックして、選択したSizeの全Color SKUへ同じ仕入れ原価を一括登録します。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div class="full"><label class="field-label">対象Size</label><div class="cost-size-checks">${sizes.map(v=>`<label class="cost-size-check"><input type="checkbox" data-sku-bulk-size value="${escapeHtml(v.id)}" ${selected.has(v.id)?'checked':''}>${escapeHtml(v.managementName||v.id)}</label>`).join('')}</div></div></div><div class="cost-sku-preview">制作方法: 外注<br>Color: 設定不要（登録済みの全Color SKUへ共通適用）<br>原価: 外注先からの仕入れ代を<strong>全て込み</strong>で登録</div><div class="cost-form-grid"><div><label class="field-label">仕入れ原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">選択Sizeへ仕入れ原価を保存</button></div>${lastHtml}<div class="cost-warning">Firestore上はSales Manager互換を維持するため、選択したSizeの各Colorを productVariants/{variantId}/costHistory に同じ原価で保存します。既存在庫数やSKU IDは変更しません。</div></details>`;
-    box.querySelector('#sku-cost-design')?.addEventListener('change',e=>{costMasterState.skuSelection.designId=e.target.value;costMasterState.skuBulkLastResult=null;renderCostSkuSection(false);});
-    box.querySelector('#sku-cost-body')?.addEventListener('change',e=>{costMasterState.skuSelection.bodyId=e.target.value;costMasterState.skuBulkLastResult=null;renderCostSkuSection(false);});
+    const overviewHtml = outsourcedCostOverviewHtml(sizes,x.designId,x.bodyId);
+    box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">外注仕入れ原価</summary><div class="cost-section-note" style="margin-top:8px;">外注の仕入れ原価は <strong>Design × Body</strong> を決めればColorごとに設定する必要はありません。Sizeだけチェックして、選択したSizeの全Color SKUへ同じ仕入れ原価を一括登録します。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div class="full"><label class="field-label">対象Size</label><div class="cost-size-checks">${sizes.map(v=>`<label class="cost-size-check"><input type="checkbox" data-sku-bulk-size value="${escapeHtml(v.id)}" ${selected.has(v.id)?'checked':''}>${escapeHtml(v.managementName||v.id)}</label>`).join('')}</div></div></div>${overviewHtml}<div class="cost-sku-preview">制作方法: 外注<br>Color: 設定不要（登録済みの全Color SKUへ共通適用）<br>原価: 外注先からの仕入れ代を<strong>全て込み</strong>で登録</div><div class="cost-form-grid"><div><label class="field-label">仕入れ原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><button id="sku-cost-save" class="cost-save-btn" type="button">選択Sizeへ仕入れ原価を保存</button></div>${lastHtml}<div class="cost-warning">Firestore上はSales Manager互換を維持するため、選択したSizeの各Colorを productVariants/{variantId}/costHistory に同じ原価で保存します。既存在庫数やSKU IDは変更しません。</div></details>`;
+    box.querySelector('#sku-cost-design')?.addEventListener('change',e=>{costMasterState.skuSelection.designId=e.target.value;costMasterState.skuBulkLastResult=null;costMasterState.outsourcedOverviewKey='';costMasterState.outsourcedOverview=null;renderCostSkuSection(false);});
+    box.querySelector('#sku-cost-body')?.addEventListener('change',e=>{costMasterState.skuSelection.bodyId=e.target.value;costMasterState.skuBulkLastResult=null;costMasterState.outsourcedOverviewKey='';costMasterState.outsourcedOverview=null;renderCostSkuSection(false);});
     box.querySelectorAll('input[data-sku-bulk-size]').forEach(input=>input.addEventListener('change',()=>{
       costMasterState.skuBulkSizeIds=Array.from(box.querySelectorAll('input[data-sku-bulk-size]:checked')).map(el=>el.value);
     }));
@@ -5579,8 +5687,10 @@ function renderCostSkuSection(loadIfNeeded=true){
       e.currentTarget.disabled=true;
       try{
         const ok=await saveOutsourcedBulkCost();
-        if(ok) renderCostSkuSection(false);
-        else e.currentTarget.disabled=false;
+        if(ok){
+          await loadOutsourcedCostOverview(costMasterState.skuSelection.designId,costMasterState.skuSelection.bodyId);
+          renderCostSkuSection(false);
+        } else e.currentTarget.disabled=false;
       }catch(err){
         console.error('bulk outsourced cost save failed',err);
         alert(`仕入れ原価を保存できませんでした。${err.message||err}`);
@@ -5588,6 +5698,12 @@ function renderCostSkuSection(loadIfNeeded=true){
       }
     });
     applyDisclosureState(box);
+    const overviewKey = `${x.designId}|${x.bodyId}`;
+    if(costMasterState.outsourcedOverviewKey !== overviewKey && !costMasterState.outsourcedOverviewLoading){
+      loadOutsourcedCostOverview(x.designId,x.bodyId).then(()=>{
+        if(state.activeView==='costs' && (costMasterState.productionMethods?.[costMasterState.skuSelection.designId]||'sheet')==='outsourced') renderCostSkuSection(false);
+      });
+    }
     return;
   }
 
@@ -5603,9 +5719,24 @@ function renderCostSkuSection(loadIfNeeded=true){
   const componentTotal=componentKnown ? bodyBase + (main||0) + (sub||0) : null;
   const applied=current ? current.amountJPY : componentTotal;
   const appliedSource=current ? 'SKU個別原価' : (method==='sheet'?'Body＋シート参考原価':'Body参考原価');
-  box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。Body原価とは別に、このSKUだけ原価を上書きしたい場合に使用します。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':'シルクスクリーン'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><input id="sku-cost-type" type="hidden" value="sku_override"><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history" data-disclosure-key="cost-sku-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(historyRowHtml).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details></details>`;
+  box.innerHTML=`<details class="cost-section" data-disclosure-key="cost-sku"><summary class="cost-section-title">SKU個別原価</summary><div class="cost-section-note" style="margin-top:8px;">通常は不要です。Body原価とは別に、このSKUだけ原価を上書きしたい場合に使用します。</div><div class="cost-sku-picker"><div><label class="field-label">Design</label><select id="sku-cost-design" class="cost-select">${designs.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.designId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Body</label><select id="sku-cost-body" class="cost-select">${bodies.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.bodyId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Color</label><select id="sku-cost-color" class="cost-select">${colors.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.colorId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div><div><label class="field-label">Size</label><select id="sku-cost-size" class="cost-select">${sizes.map(v=>`<option value="${escapeHtml(v.id)}" ${v.id===x.sizeId?'selected':''}>${escapeHtml(v.managementName||v.id)}</option>`).join('')}</select></div></div><div class="cost-sku-preview">SKU: ${escapeHtml(variantId)}<br>制作方法: ${method==='sheet'?'シート印刷':'シルクスクリーン'}<br>現在適用候補: <strong>${applied==null?'未設定':yen(applied)}</strong>（${escapeHtml(appliedSource)}）${method==='sheet'?`<br>内訳参考: Body ${bodyBase==null?'未設定':yen(bodyBase)} / メイン ${main==null?'未設定':yen(main)}${sheetSubEnabled(x.designId)?` / サブ ${sub==null?'未設定':yen(sub)}`:''}`:''}</div><div class="cost-form-grid"><div><label class="field-label">原価 JPY</label><input id="sku-cost-amount" class="cost-input" type="number" min="0" step="1" inputmode="decimal"></div><div><label class="field-label">適用開始日</label><input id="sku-cost-date" class="cost-input" type="date" value="${today}"></div><div class="wide"><label class="field-label">メモ</label><input id="sku-cost-note" class="cost-note-input" type="text" placeholder="任意"></div><input id="sku-cost-type" type="hidden" value="sku_override"><button id="sku-cost-save" class="cost-save-btn" type="button">SKU原価を追加</button></div><details class="cost-history" data-disclosure-key="cost-sku-history"><summary>このSKUの履歴（${rows.length}）</summary>${rows.length?rows.map(row=>skuHistoryRowHtml(row,variantId)).join(''):'<div class="section-note" style="margin-top:8px;">SKU個別原価は未設定です。</div>'}</details></details>`;
   ['design','body','color','size'].forEach(k=>box.querySelector(`#sku-cost-${k}`)?.addEventListener('change',async e=>{costMasterState.skuSelection[`${k}Id`]=e.target.value;await refreshSkuHistoryAndRender();}));
   box.querySelector('#sku-cost-save')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;try{const ok=await saveSkuCost();if(ok)renderCostSkuSection(false);else e.currentTarget.disabled=false;}catch(err){alert(`SKU原価を保存できませんでした。${err.message||err}`);e.currentTarget.disabled=false;}});
+  box.querySelectorAll('button[data-delete-sku-cost]').forEach(btn=>btn.addEventListener('click',async e=>{
+    const button=e.currentTarget;
+    const variant=button.getAttribute('data-delete-sku-variant')||'';
+    const date=button.getAttribute('data-delete-sku-cost')||'';
+    button.disabled=true;
+    try{
+      const ok=await deleteSkuCostHistoryRecord(variant,date);
+      if(ok){ await loadSkuCostHistory(variant); renderCostSkuSection(false); }
+      else button.disabled=false;
+    }catch(err){
+      console.error('SKU cost delete failed',err);
+      alert(`SKU個別原価を削除できませんでした。${err.message||err}`);
+      button.disabled=false;
+    }
+  }));
   applyDisclosureState(box);
 }
 
