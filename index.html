@@ -1591,6 +1591,11 @@
     color: var(--text-secondary);
   }
   .cost-status.error { color: var(--danger); background: var(--danger-bg); }
+  .cost-cache-actions { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .cost-cache-actions button { width:auto; min-width:180px; padding:0 14px; }
+  .cost-cache-report { margin-top:10px; display:grid; gap:8px; }
+  .cost-cache-counts { padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--bg); font-size:12px; line-height:1.7; }
+  .cost-cache-json { margin:0; padding:10px 12px; max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:10px; background:var(--bg); font-size:11px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
   .cost-section {
     margin: 0 0 14px;
     padding: 14px;
@@ -1824,6 +1829,7 @@
   <div class="section-title">原価マスター</div>
   <div class="section-note">原価はJPYで履歴管理します。在庫数量やDesign・Body・Color・Sizeマスターは変更しません。Sales Managerは保存された原価スケジュールを読み取ります。</div>
   <div id="cost-status" class="cost-status">原価データを読み込んでいます…</div>
+  <div id="cost-cache-admin-app"></div>
   <div id="cost-body-app"></div>
   <div id="cost-production-method-app"></div>
   <div id="cost-outsourced-app"></div>
@@ -1840,8 +1846,8 @@ import {
   setPersistence, browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
-  collection, getDocs
+  getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
+  collection, getDocs, getDocsFromServer
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -5052,6 +5058,10 @@ const costMasterState = {
   variantCostCacheMigrationRunning: false,
   variantCostCacheMigrationError: '',
   variantCostCacheMigrationResult: null,
+  fullCostCacheRunning: false,
+  fullCostCacheError: '',
+  fullCostCacheResult: null,
+  costCacheInspection: null,
   skuSelection: { designId:'', bodyId:'', colorId:'', sizeId:'' },
   outsourcedSelection: { designId:'', bodyId:'' },
   skuBulkSizeIds: [],
@@ -5265,7 +5275,7 @@ async function loadCostMasterData(force=false){
       .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')) || String(b.id).localeCompare(String(a.id)));
     costMasterState.productionMethods = productSnap.exists() ? (productSnap.data()?.productionMethods || {}) : {};
     costMasterState.loaded = true;
-    await ensureSeparatedVariantCostCaches();
+    await ensureAllSalesManagerCostCaches();
   } catch(error){
     console.error('cost master load failed', error);
     costMasterState.error = `${error.code || 'error'}: ${error.message || error}`;
@@ -5300,6 +5310,7 @@ async function rebuildBodyCostCache(){
     bodyCostSchedulesUpdatedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }, {merge:true});
+  return { schedules, merged };
 }
 async function saveBodyCostFromCard(costKey, card){
   const amount = cleanCostAmount(card.querySelector('[data-body-cost-amount]')?.value);
@@ -5352,8 +5363,9 @@ function skuVariantMetadata(){
   const x = costMasterState.skuSelection;
   return tshirtVariantMetadata(x.bodyId,x.designId,x.colorId,x.sizeId);
 }
-async function loadVariantCostRowsWithoutState(variantId){
-  const snap = await getDocs(collection(db,'productVariants',variantId,'costHistory'));
+async function loadVariantCostRowsWithoutState(variantId, fromServer=false){
+  const getter = fromServer ? getDocsFromServer : getDocs;
+  const snap = await getter(collection(db,'productVariants',variantId,'costHistory'));
   return snap.docs.map(item => ({id:item.id,...item.data()}))
     .sort((a,b) => String(b.effectiveFrom||'').localeCompare(String(a.effectiveFrom||'')) || String(b.id).localeCompare(String(a.id)));
 }
@@ -5380,7 +5392,7 @@ async function rebuildVariantCostCache(variantId, options={}){
     : new Set(['sku_override','outsourced_all_in']);
   const preserveLegacyIfNoRows = options.preserveLegacyIfNoRows === true;
   const updateCompatibility = options.updateCompatibility !== false;
-  const rows = await loadVariantCostRowsWithoutState(variantId);
+  const rows = await loadVariantCostRowsWithoutState(variantId, options.fromServer === true);
   const skuRows = logicalVariantCostRows(rows,'sku_override');
   const outsourcedRows = logicalVariantCostRows(rows,'outsourced_all_in');
   const skuOverrideCostSchedule = costScheduleRows(skuRows);
@@ -5543,6 +5555,253 @@ async function ensureSeparatedVariantCostCaches(force=false){
   }finally{
     costMasterState.variantCostCacheMigrationRunning = false;
   }
+}
+
+
+const FULL_COST_CACHE_REBUILD_VERSION = 'sales_manager_full_cost_cache_v2';
+
+function normalizedMasterLabel(value){
+  return String(value || '').trim().toLocaleLowerCase('en-US').replace(/[\s_\-\/]+/g,'');
+}
+function masterEntryMatches(entry, target){
+  const t=normalizedMasterLabel(target);
+  return [entry?.id,entry?.managementName,entry?.salesName,entry?.legacyKey,entry?.pinkoiName]
+    .some(v=>normalizedMasterLabel(v)===t);
+}
+function findCherryVintageBlackMIds(){
+  const design = masterDesigns().find(v=>masterEntryMatches(v,'Cherry'))
+    || masterDesigns().find(v=>normalizedMasterLabel(v.managementName||v.salesName||v.id).includes('cherry'));
+  const body = masterBodies().find(v=>v.id!==LEGACY_BODY_ID && masterBodyBusinessKey(v)==='Vintage');
+  const color = masterColors().find(v=>masterEntryMatches(v,'Vintage Black'))
+    || masterColors().find(v=>normalizedMasterLabel(v.managementName||v.pinkoiName||v.id).includes('vintageblack'));
+  const size = masterSizes().find(v=>masterEntryMatches(v,'M'));
+  return {designId:design?.id||'',bodyId:body?.id||'',colorId:color?.id||'',sizeId:size?.id||''};
+}
+function costCachePartFromVariantData(data){
+  return {
+    skuOverrideCostSchedule:Array.isArray(data?.skuOverrideCostSchedule)?costScheduleRows(data.skuOverrideCostSchedule):[],
+    outsourcedCostSchedule:Array.isArray(data?.outsourcedCostSchedule)?costScheduleRows(data.outsourcedCostSchedule):[],
+    costSchedule:Array.isArray(data?.costSchedule)?costScheduleRows(data.costSchedule):[],
+    latestCostJPY:data?.latestCostJPY ?? null,
+    latestCostEffectiveFrom:String(data?.latestCostEffectiveFrom||'')
+  };
+}
+async function readCostCacheFirestoreSnapshot(){
+  const productRef=doc(db,'products','tshirt');
+  const productSnap=await getDocFromServer(productRef);
+  const productData=productSnap.exists()?(productSnap.data()||{}):{};
+  const ids=findCherryVintageBlackMIds();
+  let sampleVariantId='';
+  let sampleExists=false;
+  let sampleData=null;
+  if(ids.designId&&ids.bodyId&&ids.colorId&&ids.sizeId){
+    sampleVariantId=createTshirtVariantId(ids.bodyId,ids.designId,ids.colorId,ids.sizeId);
+    const sampleSnap=await getDocFromServer(doc(db,'productVariants',sampleVariantId));
+    sampleExists=sampleSnap.exists();
+    if(sampleExists) sampleData=sampleSnap.data()||{};
+  }
+  if(!sampleExists){
+    const variants=await getDocsFromServer(collection(db,'productVariants'));
+    const found=variants.docs.find(item=>{
+      const data=item.data()||{};
+      if((data.category||data.productId)!=='tshirt' && !String(item.id||'').startsWith('tshirt__')) return false;
+      const designOk=ids.designId ? String(data.designId||'')===ids.designId : normalizedMasterLabel(data.design||data.designId).includes('cherry');
+      const bodyOk=ids.bodyId ? String(data.bodyId||'')===ids.bodyId : (normalizedMasterLabel(data.body||data.bodyId).includes('vintage') || businessKeyFromStoredBodyId(data.bodyId)==='Vintage');
+      const colorOk=ids.colorId ? String(data.colorId||'')===ids.colorId : normalizedMasterLabel(data.color||data.colorId).includes('vintageblack');
+      const sizeOk=ids.sizeId ? String(data.sizeId||'')===ids.sizeId : normalizedMasterLabel(data.size||data.sizeId)==='m';
+      return designOk&&bodyOk&&colorOk&&sizeOk;
+    });
+    if(found){
+      sampleVariantId=found.id;
+      sampleExists=true;
+      sampleData=found.data()||{};
+      ids.designId=String(sampleData.designId||ids.designId);
+      ids.bodyId=String(sampleData.bodyId||ids.bodyId);
+      ids.colorId=String(sampleData.colorId||ids.colorId);
+      ids.sizeId=String(sampleData.sizeId||ids.sizeId);
+    }
+  }
+  return {
+    checkedAt:new Date().toISOString(),
+    productExists:productSnap.exists(),
+    productCostCache:{
+      bodyCostSchedules:{
+        Vintage:costScheduleRows(productData?.bodyCostSchedules?.Vintage||[]),
+        Organic:costScheduleRows(productData?.bodyCostSchedules?.Organic||[]),
+        MIJ:costScheduleRows(productData?.bodyCostSchedules?.MIJ||[])
+      }
+    },
+    sample:{
+      label:'Cherry / Vintage / Vintage Black / M',
+      ...ids,
+      variantId:sampleVariantId,
+      exists:sampleExists,
+      cache:sampleExists?costCachePartFromVariantData(sampleData):null
+    }
+  };
+}
+
+async function refreshBodyCostHistoriesFromFirestore(){
+  const bodySnap=await getDocsFromServer(collection(db,'products','tshirt','bodyCostHistory'));
+  const bodyHistories={};
+  bodySnap.docs.forEach(item=>{
+    const data=item.data()||{};
+    const key=String(data.bodyId||'').trim();
+    const effectiveFrom=cleanCostDate(data.effectiveFrom);
+    const amountJPY=cleanCostAmount(data.amountJPY);
+    if(!key||!effectiveFrom||amountJPY===null) return;
+    if(!bodyHistories[key]) bodyHistories[key]=[];
+    bodyHistories[key].push({id:item.id,...data,effectiveFrom,amountJPY});
+  });
+  Object.values(bodyHistories).forEach(rows=>rows.sort((a,b)=>String(b.effectiveFrom).localeCompare(String(a.effectiveFrom))));
+  costMasterState.bodyHistories=bodyHistories;
+  return bodyHistories;
+}
+
+async function rebuildAllSalesManagerCostCaches(force=true){
+  if(costMasterState.fullCostCacheRunning) return costMasterState.fullCostCacheResult;
+  costMasterState.fullCostCacheRunning=true;
+  costMasterState.fullCostCacheError='';
+  renderCostStatus();
+  renderCostCacheAdminSection();
+  try{
+    // Body履歴をFirestoreから直接読み直して親キャッシュを再構築する。
+    await refreshBodyCostHistoriesFromFirestore();
+    await rebuildBodyCostCache();
+
+    // 全TシャツSKUについて正式履歴を読み、種類別キャッシュだけを再構築する。
+    const variantSnap=await getDocsFromServer(collection(db,'productVariants'));
+    const variants=variantSnap.docs.filter(item=>{
+      const data=item.data()||{};
+      return (data.category||data.productId)==='tshirt'||String(item.id||'').startsWith('tshirt__');
+    });
+    let skuOverrideSkuCount=0;
+    let outsourcedSkuCount=0;
+    const chunkSize=8;
+    for(let i=0;i<variants.length;i+=chunkSize){
+      const chunk=variants.slice(i,i+chunkSize);
+      const results=await Promise.all(chunk.map(async item=>({
+        id:item.id,
+        rebuilt:await rebuildVariantCostCache(item.id,{targetTypes:['sku_override','outsourced_all_in'],updateCompatibility:false,fromServer:true})
+      })));
+      results.forEach(({rebuilt})=>{
+        if(rebuilt.skuOverrideCostSchedule.length) skuOverrideSkuCount+=1;
+        if(rebuilt.outsourcedCostSchedule.length) outsourcedSkuCount+=1;
+      });
+    }
+
+    // 親ドキュメントをサーバーから取り直し、実際に保存されたキャッシュを確認する。
+    const afterVariants=await getDocsFromServer(collection(db,'productVariants'));
+    const tshirtAfter=afterVariants.docs.filter(item=>{
+      const data=item.data()||{};
+      return (data.category||data.productId)==='tshirt'||String(item.id||'').startsWith('tshirt__');
+    });
+    const actualSkuOverride=tshirtAfter.filter(item=>Array.isArray(item.data()?.skuOverrideCostSchedule)&&item.data().skuOverrideCostSchedule.length>0).length;
+    const actualOutsourced=tshirtAfter.filter(item=>Array.isArray(item.data()?.outsourcedCostSchedule)&&item.data().outsourcedCostSchedule.length>0).length;
+    if(actualSkuOverride!==skuOverrideSkuCount || actualOutsourced!==outsourcedSkuCount){
+      throw new Error(`親キャッシュ保存確認が一致しません。SKU個別 ${skuOverrideSkuCount}/${actualSkuOverride}、外注 ${outsourcedSkuCount}/${actualOutsourced}`);
+    }
+
+    const snapshot=await readCostCacheFirestoreSnapshot();
+    const bodySchedules=snapshot.productCostCache.bodyCostSchedules;
+    const bodyCounts={
+      Vintage:bodySchedules.Vintage.length,
+      Organic:bodySchedules.Organic.length,
+      MIJ:bodySchedules.MIJ.length
+    };
+    const result={
+      version:FULL_COST_CACHE_REBUILD_VERSION,
+      completedAt:new Date().toISOString(),
+      bodyCounts,
+      historyCheckedSkuCount:variants.length,
+      skuOverrideSkuCount:actualSkuOverride,
+      outsourcedSkuCount:actualOutsourced,
+      snapshot
+    };
+    await setDoc(doc(db,'products','tshirt'),{
+      salesManagerCostCacheRebuild:{
+        version:FULL_COST_CACHE_REBUILD_VERSION,
+        completed:true,
+        completedAt:serverTimestamp(),
+        bodyCounts,
+        historyCheckedSkuCount:variants.length,
+        skuOverrideSkuCount:actualSkuOverride,
+        outsourcedSkuCount:actualOutsourced
+      }
+    },{merge:true});
+    costMasterState.fullCostCacheResult=result;
+    costMasterState.costCacheInspection=snapshot;
+    costMasterState.fullCostCacheError='';
+    return result;
+  }catch(error){
+    console.error('full Sales Manager cost cache rebuild failed',error);
+    costMasterState.fullCostCacheError=`${error.code||'error'}: ${error.message||error}`;
+    return null;
+  }finally{
+    costMasterState.fullCostCacheRunning=false;
+    renderCostStatus();
+    renderCostCacheAdminSection();
+  }
+}
+
+async function ensureAllSalesManagerCostCaches(){
+  if(costMasterState.fullCostCacheRunning) return;
+  try{
+    const productSnap=await getDocFromServer(doc(db,'products','tshirt'));
+    const marker=productSnap.exists()?productSnap.data()?.salesManagerCostCacheRebuild:null;
+    if(marker?.completed===true && marker?.version===FULL_COST_CACHE_REBUILD_VERSION){
+      costMasterState.fullCostCacheResult={
+        version:marker.version,
+        bodyCounts:marker.bodyCounts||{Vintage:0,Organic:0,MIJ:0},
+        historyCheckedSkuCount:Number(marker.historyCheckedSkuCount||0),
+        skuOverrideSkuCount:Number(marker.skuOverrideSkuCount||0),
+        outsourcedSkuCount:Number(marker.outsourcedSkuCount||0),
+        snapshot:null
+      };
+      return;
+    }
+    await rebuildAllSalesManagerCostCaches(false);
+  }catch(error){
+    console.error('ensure full Sales Manager cost caches failed',error);
+    costMasterState.fullCostCacheError=`${error.code||'error'}: ${error.message||error}`;
+  }
+}
+
+async function inspectSalesManagerCostCaches(){
+  try{
+    costMasterState.fullCostCacheError='';
+    costMasterState.costCacheInspection=await readCostCacheFirestoreSnapshot();
+  }catch(error){
+    console.error('cost cache inspection failed',error);
+    costMasterState.fullCostCacheError=`${error.code||'error'}: ${error.message||error}`;
+  }
+  renderCostCacheAdminSection();
+}
+
+function renderCostCacheAdminSection(){
+  const box=document.getElementById('cost-cache-admin-app');
+  if(!box) return;
+  const r=costMasterState.fullCostCacheResult;
+  const snap=costMasterState.costCacheInspection || r?.snapshot || null;
+  const bodyCounts=r?.bodyCounts||null;
+  const counts=bodyCounts
+    ? `<div class="cost-cache-counts"><strong>再構築結果</strong><br>Body原価キャッシュ<br>Vintage: ${Number(bodyCounts.Vintage||0)}件<br>Organic: ${Number(bodyCounts.Organic||0)}件<br>MIJ: ${Number(bodyCounts.MIJ||0)}件<br><br>SKU個別キャッシュ生成SKU: ${Number(r.skuOverrideSkuCount||0)}件<br>外注原価キャッシュ生成SKU: ${Number(r.outsourcedSkuCount||0)}件<br>原価履歴を確認したSKU総数: ${Number(r.historyCheckedSkuCount||0)}件</div>`
+    : '';
+  const productJson=snap?JSON.stringify(snap.productCostCache,null,2):'';
+  const sampleJson=snap?JSON.stringify(snap.sample,null,2):'';
+  box.innerHTML=`<details class="cost-section" open data-disclosure-key="cost-cache-admin"><summary class="cost-section-title">Sales Manager連携キャッシュ確認・全件再構築</summary><div class="cost-section-note" style="margin-top:8px;">Firestoreの正式履歴から Body原価、SKU個別原価、外注仕入れ原価の親キャッシュを再構築します。在庫、SKU ID、各マスター、原価履歴、Sales Manager売上は変更しません。</div><div class="cost-cache-actions"><button id="cost-cache-inspect" class="cost-save-btn" type="button" ${costMasterState.fullCostCacheRunning?'disabled':''}>現在のFirestoreを確認</button><button id="cost-cache-rebuild" class="cost-save-btn" type="button" ${costMasterState.fullCostCacheRunning?'disabled':''}>全件再構築を実行</button></div>${costMasterState.fullCostCacheRunning?'<div class="section-note">再構築中です。全SKUの原価履歴を確認しています…</div>':''}${costMasterState.fullCostCacheError?`<div class="cost-warning">${escapeHtml(costMasterState.fullCostCacheError)}</div>`:''}<div class="cost-cache-report">${counts}${snap?`<div><div class="cost-outsourced-overview-title">Firestore実データ: products/tshirt 原価キャッシュ部分</div><pre class="cost-cache-json">${escapeHtml(productJson)}</pre></div><div><div class="cost-outsourced-overview-title">Firestore実データ: Cherry / Vintage / Vintage Black / M</div><pre class="cost-cache-json">${escapeHtml(sampleJson)}</pre></div>`:'<div class="section-note">「現在のFirestoreを確認」または「全件再構築を実行」で実データを表示します。</div>'}</div></details>`;
+  box.querySelector('#cost-cache-inspect')?.addEventListener('click',async e=>{
+    e.currentTarget.disabled=true;
+    await inspectSalesManagerCostCaches();
+  });
+  box.querySelector('#cost-cache-rebuild')?.addEventListener('click',async e=>{
+    if(!confirm('Firestoreの正式な原価履歴からSales Manager連携キャッシュを全件再構築します。\n\n在庫・SKU ID・各マスター・原価履歴・売上は変更しません。実行しますか？')) return;
+    e.currentTarget.disabled=true;
+    await rebuildAllSalesManagerCostCaches(true);
+    await loadCostMasterData(true);
+    renderCostMaster(false);
+  });
+  applyDisclosureState(box);
 }
 
 async function saveSkuCost(){
@@ -5962,8 +6221,10 @@ function renderCostStatus(){
   const el=document.getElementById('cost-status');
   if(!el) return;
   if(costMasterState.loading){ el.className='cost-status'; el.textContent='原価データを読み込んでいます…'; return; }
+  if(costMasterState.fullCostCacheRunning){ el.className='cost-status'; el.textContent='Sales Manager連携用の原価キャッシュを全件再構築しています…'; return; }
   if(costMasterState.variantCostCacheMigrationRunning){ el.className='cost-status'; el.textContent='Sales Manager連携用の分離キャッシュを再構築しています…'; return; }
   if(costMasterState.error){ el.className='cost-status error'; el.textContent=`原価データを読み込めませんでした。${costMasterState.error}`; return; }
+  if(costMasterState.fullCostCacheError){ el.className='cost-status error'; el.textContent=`原価は表示できますが、Sales Manager連携キャッシュの確認・再構築でエラーが発生しました。${costMasterState.fullCostCacheError}`; return; }
   if(costMasterState.variantCostCacheMigrationError){ el.className='cost-status error'; el.textContent=`原価は表示できますが、分離キャッシュの再構築に一部失敗しました。${costMasterState.variantCostCacheMigrationError}`; return; }
   el.className='cost-status';
   const r=costMasterState.variantCostCacheMigrationResult;
@@ -6136,6 +6397,7 @@ async function renderCostMaster(forceLoad=false){
   await loadCostMasterData(forceLoad);
   renderCostStatus();
   if(costMasterState.error) return;
+  renderCostCacheAdminSection();
   renderBodyCostSection();
   renderProductionMethodSection();
   renderOutsourcedCostSection();
