@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f4f3ef">
+<title>Tシャツ イベント棚卸</title>
+<style>
+:root{--bg:#f4f3ef;--card:#fff;--line:#e2e0d8;--text:#1f1e1c;--sub:#6b6a64;--muted:#96948c;--accent:#185fa5;--accent-soft:#e6f1fb;--danger:#a32d2d;--ok:#237a43}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}.app{max-width:760px;margin:0 auto;padding:max(18px,env(safe-area-inset-top)) 12px max(40px,calc(env(safe-area-inset-bottom) + 24px))}h1{font-size:22px;margin:0}.sub{color:var(--sub);font-size:13px;line-height:1.55;margin-top:5px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1;min-width:0}.btn,select,input{font:inherit}.btn{min-height:44px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--text);font-weight:700;padding:0 13px}.btn.primary{background:var(--text);color:#fff;border-color:var(--text)}.btn.accent{background:var(--accent);color:#fff;border-color:var(--accent)}.btn:disabled{opacity:.45}.select{width:100%;min-height:46px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 10px;font-size:16px}.status{font-size:12px;color:var(--sub);margin-top:7px}.status.ok{color:var(--ok);font-weight:700}.status.err{color:var(--danger);font-weight:700}.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}.stat strong{display:block;font-size:22px}.stat span{font-size:11px;color:var(--sub)}.tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.matrix-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-top:10px}.matrix{min-width:520px}.mrow,.mhead{display:grid;grid-template-columns:180px repeat(5,64px);border-bottom:1px solid var(--line)}.mhead{position:sticky;top:0;background:#f8f8f5;z-index:3;font-size:12px;font-weight:800}.name{position:sticky;left:0;z-index:2;background:#fff;padding:8px;border-right:1px solid var(--line)}.mhead .name{background:#f8f8f5;z-index:4}.sizeh{padding:10px 3px;text-align:center}.design{font-weight:800;font-size:13px;line-height:1.25;overflow-wrap:anywhere}.detail{font-size:10px;color:var(--sub);margin-top:3px;line-height:1.25}.cell{border-left:1px solid #efefe9;padding:5px 3px;display:grid;gap:3px;align-content:center;min-height:90px}.open{font-size:10px;color:var(--muted);text-align:center}.step{display:grid;grid-template-columns:24px 1fr 24px;gap:2px;align-items:center}.step button{height:34px;border:1px solid var(--line);background:#fff;border-radius:7px;font-size:18px;font-weight:800;padding:0}.qty{width:100%;height:36px;min-width:0;text-align:center;border:1px solid var(--line);border-radius:7px;font-size:16px;font-weight:800;background:#fff}.missing{display:flex;align-items:center;justify-content:center;color:#bbb;background:#f5f5f2}.note{font-size:12px;color:var(--sub);line-height:1.55}.warning{background:#fff8df;border:1px solid #ead796;border-radius:12px;padding:10px;font-size:12px;line-height:1.5;margin-top:10px}.success{background:#f2faf4;border:1px solid #cae3d0;border-radius:12px;padding:10px;font-size:12px;line-height:1.5;margin-top:10px}.hidden{display:none!important}@media(max-width:560px){.summary{grid-template-columns:repeat(3,1fr)}.stat{padding:8px}.stat strong{font-size:19px}.tools{grid-template-columns:1fr 1fr}.mrow,.mhead{grid-template-columns:150px repeat(5,62px)}.matrix{min-width:460px}}
+</style>
+</head>
+<body><main class="app">
+  <div class="row"><div class="grow"><h1>イベント棚卸</h1><div class="sub">Tシャツのイベント終了実数を数えます。途中保存はSales Managerの終了在庫に反映しません。</div></div><a class="btn" style="display:flex;align-items:center;text-decoration:none" href="./">通常在庫</a></div>
+
+  <section id="authCard" class="card"><div id="authText" class="note">Googleログインを確認しています…</div><button id="loginButton" class="btn primary hidden" type="button" style="width:100%;margin-top:10px">Googleでログイン</button></section>
+
+  <section id="mainPanel" class="hidden">
+    <div class="card">
+      <label class="note" for="sessionSelect">イベント</label>
+      <select id="sessionSelect" class="select"><option value="">イベントを選択</option></select>
+      <div id="eventMeta" class="status"></div>
+    </div>
+
+    <div id="countPanel" class="hidden">
+      <div class="card summary">
+        <div class="stat"><strong id="countedStat">0/0</strong><span>入力SKU</span></div>
+        <div class="stat"><strong id="qtyStat">0</strong><span>終了点数</span></div>
+        <div class="stat"><strong id="openingStat">0</strong><span>開始点数</span></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><div class="grow"><strong>終了実数を入力</strong><div class="note">空欄は未入力です。0個も必ず「0」として確定してください。</div></div><button id="reloadButton" class="btn" type="button">再読込</button></div>
+        <div class="tools"><button id="copyOpeningButton" class="btn" type="button">開始数をコピー</button><button id="zeroAllButton" class="btn" type="button">すべて0</button></div>
+        <div id="matrixWrap" class="matrix-wrap"><div id="matrix" class="matrix"></div></div>
+        <div id="draftInfo" class="status"></div>
+        <div class="tools"><button id="saveDraftButton" class="btn" type="button">途中保存</button><button id="confirmButton" class="btn accent" type="button">棚卸を確定</button></div>
+        <div id="message" class="status"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, updateDoc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+const firebaseConfig={apiKey:"AIzaSyA1AZlnCYr5cfHG3HDcyvG17jokBnr5lO8",authDomain:"t-shirtstock.firebaseapp.com",projectId:"t-shirtstock",storageBucket:"t-shirtstock.firebasestorage.app",messagingSenderId:"485805702075",appId:"1:485805702075:web:f9d8668ca57d9f58c4229e",measurementId:"G-TXEHB9FGSR"};
+const app=initializeApp(firebaseConfig);const auth=getAuth(app);const db=getFirestore(app);const provider=new GoogleAuthProvider();
+const SIZE_ORDER=["S","M","L","XL","XXL"];
+const $=id=>document.getElementById(id);
+let user=null,sessions=[],session=null,rows=[],values=new Map();
+
+function n(v){const x=Number(v);return Number.isFinite(x)?Math.max(0,Math.floor(x)):0}
+function text(v){return String(v??"").trim()}
+function esc(v){return text(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
+function parseDetail(value){const p=text(value).split("/").map(x=>x.trim());return{body:p[0]||"",color:p[1]||"",size:p[2]||""}}
+function timestampText(value){try{if(value?.toDate)return value.toDate().toLocaleString("ja-JP");}catch{}return ""}
+function setMessage(msg,type=""){const el=$("message");el.textContent=msg;el.className=`status ${type}`.trim()}
+
+async function loadSessions(){
+  const snap=await getDocs(collection(db,"salesSessions"));
+  sessions=snap.docs.map(d=>({sessionId:d.id,...d.data()})).filter(s=>(s.status==="open"||s.status==="pending_allocation")&&Array.isArray(s?.inventoryCount?.opening?.items));
+  sessions.sort((a,b)=>text(b.startDate).localeCompare(text(a.startDate)));
+  const select=$("sessionSelect");select.innerHTML='<option value="">イベントを選択</option>'+sessions.map(s=>`<option value="${esc(s.sessionId)}">${esc(s.eventName||s.sessionId)}${s.status==="pending_allocation"?"（仮終了中）":""}</option>`).join("");
+  const requested=new URLSearchParams(location.search).get("session");if(requested&&sessions.some(s=>s.sessionId===requested)){select.value=requested;await chooseSession(requested)}
+}
+
+function buildRows(data){
+  const opening=(data?.inventoryCount?.opening?.items||[]).filter(item=>item.category==="tshirt"&&item.inventorySource==="tshirt");
+  const closingMap=new Map((data?.inventoryCount?.closing?.items||[]).map(item=>[item.variantId,item]));
+  const draftMap=new Map((data?.inventoryCount?.externalCounts?.tshirt?.draftItems||[]).map(item=>[item.variantId,item]));
+  rows=opening.map(item=>{const d=parseDetail(item.detail);return{...item,body:d.body,color:d.color,size:d.size,closing:closingMap.get(item.variantId)||null,draft:draftMap.get(item.variantId)||null}});
+  values=new Map();
+  rows.forEach(row=>{const source=row.draft||row.closing;if(source&&source.closingQty!==null&&source.closingQty!==undefined&&source.closingQty!=="")values.set(row.variantId,n(source.closingQty));else values.set(row.variantId,null)});
+}
+
+function groups(){
+  const map=new Map();rows.forEach(row=>{const key=[row.label,row.body,row.color].join("||");if(!map.has(key))map.set(key,{design:row.label||"Tシャツ",body:row.body,color:row.color,items:[]});map.get(key).items.push(row)});
+  return [...map.values()].sort((a,b)=>a.design.localeCompare(b.design,"ja")||a.body.localeCompare(b.body,"ja")||a.color.localeCompare(b.color,"ja"));
+}
+
+function render(){
+  const head=`<div class="mhead"><div class="name">Design / Body / Color</div>${SIZE_ORDER.map(s=>`<div class="sizeh">${s}</div>`).join("")}</div>`;
+  const body=groups().map(g=>`<div class="mrow"><div class="name"><div class="design">${esc(g.design)}</div><div class="detail">${esc([g.body,g.color].filter(Boolean).join(" / "))}</div></div>${SIZE_ORDER.map(size=>{const item=g.items.find(x=>x.size===size);if(!item)return'<div class="cell missing">—</div>';const value=values.get(item.variantId);return`<div class="cell"><div class="open">開始 ${n(item.openingQty)}</div><div class="step"><button type="button" data-step="-1" data-id="${esc(item.variantId)}">−</button><input class="qty" data-id="${esc(item.variantId)}" type="number" inputmode="numeric" min="0" step="1" value="${value===null?"":value}" placeholder="—"><button type="button" data-step="1" data-id="${esc(item.variantId)}">＋</button></div></div>`}).join("")}</div>`).join("");
+  $("matrix").innerHTML=head+body;bindInputs();updateSummary();
+  const ext=session?.inventoryCount?.externalCounts?.tshirt;$("draftInfo").textContent=ext?.status==="confirmed"?`前回確定: ${timestampText(ext.confirmedAt)||"保存済み"}`:ext?.status==="draft"?`途中保存あり: ${timestampText(ext.savedAt)||"保存済み"}`:"";
+}
+
+function bindInputs(){
+  document.querySelectorAll(".qty").forEach(input=>input.addEventListener("input",()=>{const raw=input.value;values.set(input.dataset.id,raw===""?null:n(raw));updateSummary()}));
+  document.querySelectorAll("[data-step]").forEach(btn=>btn.addEventListener("click",()=>{const id=btn.dataset.id;const next=Math.max(0,n(values.get(id)||0)+Number(btn.dataset.step));values.set(id,next);const input=document.querySelector(`.qty[data-id="${CSS.escape(id)}"]`);if(input)input.value=String(next);updateSummary()}));
+}
+function updateSummary(){const counted=[...values.values()].filter(v=>v!==null).length;const total=[...values.values()].reduce((s,v)=>s+(v===null?0:n(v)),0);$("countedStat").textContent=`${counted}/${rows.length}`;$("qtyStat").textContent=total;$("openingStat").textContent=rows.reduce((s,r)=>s+n(r.openingQty),0)}
+function itemsFromValues(){return rows.map(row=>({variantId:row.variantId,closingQty:values.get(row.variantId)}))}
+
+async function chooseSession(id){
+  setMessage("");const ref=doc(db,"salesSessions",id);const snap=await getDoc(ref);if(!snap.exists())throw new Error("イベントが見つかりません。");session={sessionId:id,...snap.data()};buildRows(session);$("eventMeta").textContent=[session.eventName,session.city,session.country,session.startDate&&session.endDate?`${session.startDate}〜${session.endDate}`:""].filter(Boolean).join(" / ");$("countPanel").classList.toggle("hidden",!rows.length);if(!rows.length){$("eventMeta").textContent+=" / Tシャツ開始在庫がありません";return}render();
+}
+
+async function saveDraft(){
+  if(!session)return;setMessage("保存中…");const items=itemsFromValues();await updateDoc(doc(db,"salesSessions",session.sessionId),{"inventoryCount.externalCounts.tshirt":{status:"draft",source:"tshirt_stock_app",savedAt:serverTimestamp(),savedByEmail:user?.email||"",draftItems:items},"inventoryCount.updatedAt":serverTimestamp(),updatedAt:serverTimestamp()});setMessage("途中保存しました。Sales Managerの終了在庫にはまだ反映していません。","ok");await chooseSession(session.sessionId)
+}
+
+async function confirmCount(){
+  if(!session)return;const items=itemsFromValues();const missing=items.filter(x=>x.closingQty===null);if(missing.length){setMessage(`未入力が ${missing.length} SKUあります。0個も「0」と入力してください。`,"err");return}if(!confirm(`Tシャツ ${items.length} SKU、終了合計 ${items.reduce((s,x)=>s+n(x.closingQty),0)} 点で棚卸を確定しますか？`))return;
+  setMessage("確定中…");const ref=doc(db,"salesSessions",session.sessionId);
+  await runTransaction(db,async tx=>{const snap=await tx.get(ref);if(!snap.exists())throw new Error("イベントが見つかりません。");const current=snap.data();if(current.status!=="open"&&current.status!=="pending_allocation")throw new Error("正式終了済みイベントは変更できません。");const tshirtIds=new Set((current?.inventoryCount?.opening?.items||[]).filter(x=>x.category==="tshirt"&&x.inventorySource==="tshirt").map(x=>x.variantId));const existing=current?.inventoryCount?.closing?.items||[];const existingMap=new Map(existing.map(x=>[x.variantId,x]));const preserved=existing.filter(x=>!tshirtIds.has(x.variantId));const mergedTshirt=items.map(x=>({...existingMap.get(x.variantId),variantId:x.variantId,closingQty:n(x.closingQty),loss:n(existingMap.get(x.variantId)?.loss),theft:n(existingMap.get(x.variantId)?.theft),damage:n(existingMap.get(x.variantId)?.damage),gift:n(existingMap.get(x.variantId)?.gift),sample:n(existingMap.get(x.variantId)?.sample),stockAdjustment:Number(existingMap.get(x.variantId)?.stockAdjustment||0)}));const totalQty=mergedTshirt.reduce((s,x)=>s+n(x.closingQty),0);tx.update(ref,{"inventoryCount.closing":{savedAt:serverTimestamp(),savedByEmail:user?.email||"",items:[...preserved,...mergedTshirt]},"inventoryCount.externalCounts.tshirt":{status:"confirmed",source:"tshirt_stock_app",confirmedAt:serverTimestamp(),confirmedByEmail:user?.email||"",countedCount:mergedTshirt.length,totalSkuCount:mergedTshirt.length,totalQty},"inventoryCount.updatedAt":serverTimestamp(),updatedAt:serverTimestamp()})});
+  setMessage("棚卸を確定しました。Sales Managerの終了在庫へ反映済みです。","ok");await chooseSession(session.sessionId)
+}
+
+$("loginButton").addEventListener("click",()=>signInWithPopup(auth,provider));
+$("sessionSelect").addEventListener("change",e=>e.target.value?chooseSession(e.target.value):$("countPanel").classList.add("hidden"));
+$("reloadButton").addEventListener("click",()=>session&&chooseSession(session.sessionId));
+$("copyOpeningButton").addEventListener("click",()=>{rows.forEach(r=>values.set(r.variantId,n(r.openingQty)));render()});
+$("zeroAllButton").addEventListener("click",()=>{rows.forEach(r=>values.set(r.variantId,0));render()});
+$("saveDraftButton").addEventListener("click",()=>saveDraft().catch(e=>setMessage(e.message||String(e),"err")));
+$("confirmButton").addEventListener("click",()=>confirmCount().catch(e=>setMessage(e.message||String(e),"err")));
+
+onAuthStateChanged(auth,async current=>{user=current;$("authText").textContent=current?`ログイン中: ${current.email||""}`:"イベント棚卸を使うにはログインしてください。";$("loginButton").classList.toggle("hidden",Boolean(current));$("mainPanel").classList.toggle("hidden",!current);if(current){try{await loadSessions()}catch(e){$("authText").textContent=`読込エラー: ${e.message||e}`}}});
+</script>
+</body></html>
