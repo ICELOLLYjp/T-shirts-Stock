@@ -1720,6 +1720,20 @@
   .order-entry-head { display:flex; gap:8px; justify-content:space-between; align-items:center; }
   .order-entry strong { overflow-wrap:anywhere; }
   .order-entry p { margin:0; font-size:13px; overflow-wrap:anywhere; white-space:pre-wrap; }
+  .order-shipping-heading { display:grid; gap:3px; margin:8px 0 0; border-top:1px solid var(--border); padding-top:12px; }
+  .order-shipping-heading strong { font-size:14px; }
+  .order-shipping-help { font-size:12px; line-height:1.5; color:var(--text-secondary); margin:0; overflow-wrap:anywhere; }
+  .order-shipping-fields { min-width:0; margin:0; padding:12px; border:1px solid var(--border); border-radius:10px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .order-shipping-fields[hidden] { display:none !important; }
+  .order-shipping-fields legend { padding:0 5px; font-size:13px; font-weight:700; color:var(--accent); }
+  .order-shipping-no-post { display:flex !important; align-items:center; gap:8px !important; font-size:13px !important; }
+  .order-form .order-shipping-no-post input[type="checkbox"] { min-height:22px; width:22px; height:22px; flex:none; padding:0; accent-color:var(--accent); }
+  .order-shipping-fields input:disabled { opacity:.6; background:var(--bg); }
+  .order-ems-summary { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; padding:8px 10px; background:var(--accent-bg); color:var(--accent); border-radius:8px; font-size:12px; }
+  .order-ems-detail { display:grid; gap:8px; margin:8px 0 12px; }
+  .order-ems-detail pre { margin:0; padding:10px; border:1px solid var(--border); border-radius:9px; overflow-wrap:anywhere; white-space:pre-wrap; font-size:13px; line-height:1.5; background:var(--bg); }
+  .order-ems-detail button { min-height:42px; border:1px solid var(--accent); border-radius:9px; background:var(--accent-bg); color:var(--accent); font-weight:700; }
+  .order-copy-status { font-size:12px; color:var(--text-secondary); }
   .task-design-heading { margin:16px 0 7px; padding:10px 12px; border-radius:9px; background:var(--accent-bg); color:var(--accent); font-size:16px; font-weight:700; }
   @media (min-width:700px) { .main-nav { grid-template-columns:repeat(6,minmax(0,1fr)); } .design-picker-options { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 </style>
@@ -6739,11 +6753,92 @@ function populatePreferredVariantSelects(designId, bodySelect, colorSelect, show
   if(availableColors.some(color=>color.id===oldColor))colorSelect.value=oldColor;
 }
 function orderId(){return `order_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;}
+
+// Recipient address only. This does not produce an EMS label or a customs declaration.
+// Old orders without a shipping object continue to render and can be edited.
+function readCustomerShipping(form){
+  const fields=new FormData(form);
+  const method=String(fields.get('shippingMethod')||'Unspecified');
+  if(method!=='EMS')return {method};
+  const get=(name)=>String(fields.get(name)||'').trim();
+  const noPostalCode=Boolean(form.querySelector('[name="shipNoPostalCode"]')?.checked);
+  return {
+    method,recipientName:get('shipRecipientName'),company:get('shipCompany'),
+    addressLine1:get('shipAddressLine1'),addressLine2:get('shipAddressLine2'),
+    city:get('shipCity'),region:get('shipRegion'),postalCode:noPostalCode?'':get('shipPostalCode'),
+    noPostalCode,country:get('shipCountry'),phone:get('shipPhone'),email:get('shipEmail')
+  };
+}
+function emsAddressMissing(shipping){
+  if(shipping?.method!=='EMS')return [];
+  const needed=[['recipientName','Recipient name'],['addressLine1','Street / building'],['city','City / area'],['country','Country / region']];
+  const missing=needed.filter(([key])=>!String(shipping[key]||'').trim()).map(([,name])=>name);
+  // Postal codes are unavailable in some destinations; never fabricate one.
+  if(!shipping.noPostalCode && !String(shipping.postalCode||'').trim())missing.push('Postal code (or select No postal code)');
+  return missing;
+}
+function emsShippingFormFields(shipping={}){
+  const current=shipping?.method||'Unspecified';
+  const value=name=>escapeHtml(shipping?.[name]||'');
+  const selected=method=>current===method?'selected':'';
+  return `<div class="order-shipping-heading wide"><strong>Delivery / EMS recipient</strong><span class="order-shipping-help">Save the address with the order. Use Japan Post International Mail My Page to create the actual label.</span></div>
+    <label class="wide">Delivery method<select name="shippingMethod"><option value="Unspecified" ${selected('Unspecified')}>Not decided</option><option value="EMS" ${selected('EMS')}>EMS (international)</option><option value="Pickup" ${selected('Pickup')}>Pickup / handover</option><option value="Other" ${selected('Other')}>Other delivery</option></select></label>
+    <fieldset class="order-shipping-fields wide" data-ems-fields ${current==='EMS'?'':'hidden'}><legend>EMS delivery address</legend>
+      <p class="order-shipping-help wide">Enter the recipient's mailing details, not an Instagram handle. Keep TAIWAN, HONG KONG and MACAO as separate destinations in Japan Post My Page. You can save an order while the address is still pending.</p>
+      <p class="order-shipping-help wide">Privacy: enter real customer addresses only after confirming Firestore access is limited to authorized staff.</p>
+      <label class="wide">Recipient full name<input name="shipRecipientName" maxlength="160" autocomplete="off" value="${value('recipientName')}" placeholder="Name on the delivery label"></label>
+      <label class="wide">Company (optional)<input name="shipCompany" maxlength="160" autocomplete="off" value="${value('company')}" placeholder="Company / shop name"></label>
+      <label class="wide">Street address / Building<input name="shipAddressLine1" maxlength="220" autocomplete="off" value="${value('addressLine1')}" placeholder="Street, number, building"></label>
+      <label class="wide">Apartment / Floor (optional)<input name="shipAddressLine2" maxlength="220" autocomplete="off" value="${value('addressLine2')}" placeholder="Unit, floor, additional address"></label>
+      <label>City / Area<input name="shipCity" maxlength="120" autocomplete="off" value="${value('city')}" placeholder="City / district"></label>
+      <label>State / Province (if applicable)<input name="shipRegion" maxlength="120" autocomplete="off" value="${value('region')}" placeholder="State / province"></label>
+      <label>Postal code<input name="shipPostalCode" maxlength="30" autocomplete="off" value="${value('postalCode')}" placeholder="Postal / ZIP code" ${shipping?.noPostalCode?'disabled':''}></label>
+      <label class="order-shipping-no-post wide"><input name="shipNoPostalCode" type="checkbox" ${shipping?.noPostalCode?'checked':''}> Destination has no postal code</label>
+      <label class="wide">Destination country / region<input name="shipCountry" maxlength="100" autocomplete="off" value="${value('country')}" placeholder="e.g. TAIWAN / HONG KONG / SINGAPORE"></label>
+      <label>Recipient phone (recommended)<input name="shipPhone" type="tel" maxlength="60" autocomplete="off" value="${value('phone')}" placeholder="+886 ..."></label>
+      <label>Email (optional)<input name="shipEmail" type="email" maxlength="160" autocomplete="off" value="${value('email')}" placeholder="recipient@example.com"></label>
+      <p class="order-shipping-help wide" data-ems-address-status role="status"></p>
+    </fieldset>
+    <p class="order-shipping-help wide">Changing the delivery method from EMS and saving removes the previous EMS address from this order.</p>`;
+}
+function updateCustomerShippingForm(form){
+  const ems=form.elements.namedItem('shippingMethod')?.value==='EMS';
+  const fields=form.querySelector('[data-ems-fields]');
+  if(fields)fields.hidden=!ems;
+  const noPost=form.querySelector('[name="shipNoPostalCode"]');
+  const postal=form.querySelector('[name="shipPostalCode"]');
+  if(postal)postal.disabled=Boolean(noPost?.checked);
+  const status=form.querySelector('[data-ems-address-status]');
+  if(status && ems){
+    const shipping=readCustomerShipping(form);
+    const missing=emsAddressMissing(shipping);
+    status.textContent=missing.length?`Address pending: ${missing.join(', ')}.`:'Address details entered. Check destination-specific EMS requirements before posting.';
+  }
+}
+function connectCustomerShippingForm(form){
+  if(!form)return;
+  form.querySelector('[name="shippingMethod"]')?.addEventListener('change',()=>updateCustomerShippingForm(form));
+  form.querySelector('[name="shipNoPostalCode"]')?.addEventListener('change',()=>updateCustomerShippingForm(form));
+  form.querySelector('[data-ems-fields]')?.addEventListener('input',()=>updateCustomerShippingForm(form));
+  updateCustomerShippingForm(form);
+}
+function emsShippingCopyText(shipping){
+  if(shipping?.method!=='EMS')return '';
+  const parts=[
+    ['Recipient',shipping.recipientName],['Company',shipping.company],
+    ['Street address',shipping.addressLine1],['Apartment / floor',shipping.addressLine2],
+    ['City / area',shipping.city],['State / province',shipping.region],
+    ['Postal code',shipping.noPostalCode?'Not used':shipping.postalCode],
+    ['Country / region',shipping.country],['Phone',shipping.phone],['Email',shipping.email]
+  ];
+  return parts.filter(([,v])=>String(v||'').trim()).map(([name,v])=>`${name}: ${v}`).join('\n');
+}
 function renderCustomerOrders(){
   const box=document.getElementById('customer-orders-app');if(!box)return;
   if(!masterReady || !masterDocument){box.innerHTML='<div class="order-panel">Sign in to save customer requests.</div>';return;}
   const previousForm=box.querySelector('#customer-order-form');
   const draft=previousForm ? Object.fromEntries(new FormData(previousForm)) : null;
+  if(draft)draft.shipNoPostalCode=Boolean(previousForm.querySelector('[name="shipNoPostalCode"]')?.checked);
   const designs=masterDesigns(), bodies=assignableBodies(), colors=masterColors(),sizes=masterSizes();
   const orders=Object.values(masterDocument.customer_orders || {}).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   const options=(items,blank='Select')=>`<option value="">${blank}</option>`+items.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName||x.id)}</option>`).join('');
@@ -6757,7 +6852,8 @@ function renderCustomerOrders(){
    <label>Quantity<input name="qty" type="number" min="1" max="999" value="1" required inputmode="numeric"></label>
    <label>Due date<input name="dueDate" type="date"></label>
    <label class="wide">Source<select name="source"><option>Event</option><option>Instagram</option><option>Pinkoi</option><option>Email</option><option>Other</option></select></label>
-   <label class="wide">Notes<textarea name="notes" maxlength="3000" placeholder="Request details, shipping notes, follow-up…"></textarea></label>
+   ${emsShippingFormFields()}
+   <label class="wide">Notes<textarea name="notes" maxlength="3000" placeholder="Request details, follow-up…"></textarea></label>
    <button class="wide" type="submit">Save Order</button>
   </form><div id="customer-order-result" role="status" class="section-note"></div></div>
   <div class="order-panel"><strong>Orders (${orders.length})</strong>${orders.length?orders.map(order=>{
@@ -6765,22 +6861,33 @@ function renderCustomerOrders(){
     const b=masterDocument.masters?.bodies?.[order.bodyId]?.managementName||order.bodyId;
     const c=masterDocument.masters?.colors?.[order.colorId]?.managementName||order.colorId;
     const z=masterDocument.masters?.sizes?.[order.sizeId]?.managementName||order.sizeId;
-    return `<div class="order-entry"><div class="order-entry-head"><strong>${escapeHtml(d)} · ${escapeHtml(z)} × ${Number(order.qty)||0}</strong><select class="order-action" data-order-status="${escapeHtml(order.id)}" aria-label="Order status">${statuses.map(st=>`<option ${st===order.status?'selected':''}>${st}</option>`).join('')}</select></div><p>${escapeHtml(b)} / ${escapeHtml(c)}</p><p>${escapeHtml(order.contact||'No contact')} · ${escapeHtml(order.source||'Event')}${order.dueDate?' · Due '+escapeHtml(order.dueDate):''}</p>${order.notes?`<p>${escapeHtml(order.notes)}</p>`:''}<small>${escapeHtml(order.createdAt?.slice(0,10)||'')}</small>
-      <details data-disclosure-key="order-edit:${escapeHtml(order.id)}"><summary>Edit details</summary><form class="order-form" data-order-edit="${escapeHtml(order.id)}" style="margin-top:10px;">
+    const shipping=order.shipping||{};
+    const missing=emsAddressMissing(shipping);
+    const emsSummary=shipping.method==='EMS'?`<div class="order-ems-summary"><strong>EMS · ${missing.length?'Address pending':'Address entered'}</strong>${shipping.country?`<span>${escapeHtml(shipping.country)}</span>`:''}</div>`:'';
+    const addressDetails=shipping.method==='EMS'?`<details data-disclosure-key="order-shipping:${escapeHtml(order.id)}"><summary>EMS recipient address${missing.length?' · incomplete':''}</summary><div class="order-ems-detail">${emsShippingCopyText(shipping)?`<pre>${escapeHtml(emsShippingCopyText(shipping))}</pre>`:'<p>Recipient address not entered yet.</p>'}${missing.length?`<p class="order-shipping-help">Missing: ${escapeHtml(missing.join(', '))}</p>`:''}<button type="button" data-order-copy-address="${escapeHtml(order.id)}" ${emsShippingCopyText(shipping)?'':'disabled'}>Copy address for EMS label</button><span class="order-copy-status" role="status"></span></div></details>`:'';
+    return `<div class="order-entry"><div class="order-entry-head"><strong>${escapeHtml(d)} · ${escapeHtml(z)} × ${Number(order.qty)||0}</strong><select class="order-action" data-order-status="${escapeHtml(order.id)}" aria-label="Order status">${statuses.map(st=>`<option ${st===order.status?'selected':''}>${st}</option>`).join('')}</select></div><p>${escapeHtml(b)} / ${escapeHtml(c)}</p><p>${escapeHtml(order.contact||'No contact')} · ${escapeHtml(order.source||'Event')}${order.dueDate?' · Due '+escapeHtml(order.dueDate):''}</p>${order.notes?`<p>${escapeHtml(order.notes)}</p>`:''}${emsSummary}${addressDetails}<small>${escapeHtml(order.createdAt?.slice(0,10)||'')}</small>
+      <details data-disclosure-key="order-edit:${escapeHtml(order.id)}"><summary>Edit details / delivery</summary><form class="order-form" data-order-edit="${escapeHtml(order.id)}" style="margin-top:10px;">
         <label class="wide">Customer / Contact<input name="contact" maxlength="160" value="${escapeHtml(order.contact||'')}"></label>
         <label class="wide">Due date<input name="dueDate" type="date" value="${escapeHtml(order.dueDate||'')}"></label>
+        ${emsShippingFormFields(shipping)}
         <label class="wide">Notes<textarea name="notes" maxlength="3000">${escapeHtml(order.notes||'')}</textarea></label>
         <button class="wide" type="submit">Save Changes</button>
       </form></details></div>`;
   }).join(''):'<p class="section-note">No orders yet.</p>'}</div>`;
   const form=box.querySelector('#customer-order-form');
-  if(draft && form){ Object.entries(draft).forEach(([name,value])=>{const control=form.elements.namedItem(name); if(control)control.value=value;}); }
+  if(draft && form){ Object.entries(draft).forEach(([name,value])=>{
+    const control=form.elements.namedItem(name);
+    if(!control)return;
+    if(control.type==='checkbox')control.checked=Boolean(value);
+    else control.value=value;
+  }); }
+  connectCustomerShippingForm(form);
   form?.addEventListener('submit',async e=>{
     e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;
     const f=new FormData(form),qty=Number(f.get('qty'));
     if(!Number.isInteger(qty)||qty<1||qty>999){alert('Enter a valid quantity.');button.disabled=false;return;}
     const id=orderId();
-    const order={id,contact:String(f.get('contact')||'').trim(),designId:String(f.get('designId')||''),bodyId:String(f.get('bodyId')||''),colorId:String(f.get('colorId')||''),sizeId:String(f.get('sizeId')||''),qty,dueDate:String(f.get('dueDate')||''),source:String(f.get('source')||'Event'),notes:String(f.get('notes')||'').trim(),status:'New',createdAt:nowIso(),updatedAt:nowIso()};
+    const order={id,contact:String(f.get('contact')||'').trim(),designId:String(f.get('designId')||''),bodyId:String(f.get('bodyId')||''),colorId:String(f.get('colorId')||''),sizeId:String(f.get('sizeId')||''),qty,dueDate:String(f.get('dueDate')||''),source:String(f.get('source')||'Event'),notes:String(f.get('notes')||'').trim(),shipping:readCustomerShipping(form),status:'New',createdAt:nowIso(),updatedAt:nowIso()};
     if(!order.designId || !order.bodyId || !order.colorId || !order.sizeId){alert('Select Design, Body, Color and Size.');button.disabled=false;return;}
     const next={...(masterDocument.customer_orders||{}),[id]:order};
     if(await saveMasterData({customer_orders:next})){
@@ -6794,20 +6901,35 @@ function renderCustomerOrders(){
     if(await saveMasterData({customer_orders:next}))renderCustomerOrders();
     else{alert('Status could not be saved.');select.disabled=false;}
   }));
-  box.querySelectorAll('[data-order-edit]').forEach(editForm=>editForm.addEventListener('submit',async e=>{
-    e.preventDefault();const id=editForm.getAttribute('data-order-edit');
-    const current=masterDocument.customer_orders?.[id];if(!current)return;
-    const btn=editForm.querySelector('[type=submit]');btn.disabled=true;
-    const values=new FormData(editForm);
-    const next={...(masterDocument.customer_orders||{}),[id]:{
-      ...current,contact:String(values.get('contact')||'').trim(),dueDate:String(values.get('dueDate')||''),notes:String(values.get('notes')||'').trim(),updatedAt:nowIso()
-    }};
-    if(await saveMasterData({customer_orders:next}))renderCustomerOrders();
-    else{alert('Changes could not be saved.');btn.disabled=false;}
+  box.querySelectorAll('[data-order-edit]').forEach(editForm=>{
+    connectCustomerShippingForm(editForm);
+    editForm.addEventListener('submit',async e=>{
+      e.preventDefault();const id=editForm.getAttribute('data-order-edit');
+      const current=masterDocument.customer_orders?.[id];if(!current)return;
+      const btn=editForm.querySelector('[type=submit]');btn.disabled=true;
+      const values=new FormData(editForm);
+      const next={...(masterDocument.customer_orders||{}),[id]:{
+        ...current,contact:String(values.get('contact')||'').trim(),dueDate:String(values.get('dueDate')||''),
+        shipping:readCustomerShipping(editForm),notes:String(values.get('notes')||'').trim(),updatedAt:nowIso()
+      }};
+      if(await saveMasterData({customer_orders:next}))renderCustomerOrders();
+      else{alert('Changes could not be saved.');btn.disabled=false;}
+    });
+  });
+  box.querySelectorAll('[data-order-copy-address]').forEach(button=>button.addEventListener('click',async()=>{
+    const id=button.getAttribute('data-order-copy-address');
+    const shipping=masterDocument.customer_orders?.[id]?.shipping;
+    const text=emsShippingCopyText(shipping);
+    if(!text)return;
+    const status=button.parentElement.querySelector('.order-copy-status');
+    try{
+      if(!navigator.clipboard?.writeText)throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      if(status)status.textContent='Address copied. Paste it into Japan Post My Page.';
+    }catch(error){if(status)status.textContent='Could not copy. Please select the address above manually.';}
   }));
   applyDisclosureState(box);
 }
-
 function renderCurrentView(){
   renderBodySettings();
   renderColorSettings();
