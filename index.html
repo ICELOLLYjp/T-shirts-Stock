@@ -1665,6 +1665,50 @@
     .cost-outsourced-price-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
   }
 
+
+  /* Design picker, combinations, review board and English order notes */
+  .main-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .main-nav button { min-width: 0; }
+  .inventory-mode-switch { display:flex; gap:8px; margin:12px 0; }
+  .inventory-mode-switch button { flex:1; min-width:0; min-height:44px; }
+  .inventory-mode-switch button.is-current { border-color:var(--accent); color:var(--accent); background:var(--accent-bg); font-weight:700; }
+  .design-picker, .combo-panel, .inventory-review, .order-panel { margin:12px 0; padding:13px; background:var(--card); border:1px solid var(--border); border-radius:13px; }
+  #design-tabs { display:block; }
+  .design-picker-options button[hidden], .review-table tr[hidden] {display:none;}
+  #inventory-design-panel[hidden], #inventory-overview[hidden] { display:none !important; }
+  .qty-btn:disabled {opacity:.4; cursor:not-allowed;}
+  .design-picker > summary { min-height:44px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-size:17px; font-weight:700; }
+  .design-picker-search, .review-search, .order-form input, .order-form select, .order-form textarea, .combo-controls select, .task-design-search { width:100%; min-width:0; min-height:42px; padding:9px; border-radius:9px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:16px; }
+  .design-picker-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:9px; max-height:255px; overflow:auto; }
+  .design-picker-options button { padding:11px 7px; min-height:44px; border:1px solid var(--border); border-radius:9px; background:var(--card); color:var(--text); text-align:left; overflow-wrap:anywhere; }
+  .design-picker-options button.selected { background:var(--accent-bg); border-color:var(--accent); color:var(--accent); font-weight:700; }
+  .combo-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .combo-row:last-child { border-bottom:0; }
+  .combo-row span { font-size:13px; overflow-wrap:anywhere; }
+  .combo-row button, .review-actions button, .order-action { min-height:38px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--text); padding:6px 12px; }
+  .combo-controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .combo-controls .full { grid-column:1/-1; }
+  .combo-controls button { min-height:44px; border:1px solid var(--accent); border-radius:9px; background:var(--accent-bg); color:var(--accent); }
+  .review-stats { margin:10px 0; font-size:13px; color:var(--text-secondary); }
+  .review-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  .review-table-wrap { max-width:100%; overflow:auto; border:1px solid var(--border); border-radius:10px; }
+  .review-table { border-collapse:collapse; width:100%; min-width:595px; font-size:12px; }
+  .review-table th,.review-table td { border-bottom:1px solid var(--border); padding:9px 7px; text-align:center; white-space:nowrap; }
+  .review-table td:nth-child(2),.review-table th:nth-child(2) { text-align:left; }
+  .review-table th { position:sticky; top:0; z-index:1; background:var(--accent-bg); }
+  .review-table tr.is-checked { background:var(--accent-bg); }
+  .review-table input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
+  .order-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .order-form label { font-size:12px; color:var(--text-secondary); display:grid; gap:4px; }
+  .order-form .wide { grid-column:1/-1; }
+  .order-form textarea { min-height:84px; resize:vertical; }
+  .order-form button { min-height:45px; border:1px solid var(--accent); background:var(--accent-bg); color:var(--accent); border-radius:9px; font-weight:700; }
+  .order-entry { border-top:1px solid var(--border); padding:12px 0; display:grid; gap:6px; }
+  .order-entry-head { display:flex; gap:8px; justify-content:space-between; align-items:center; }
+  .order-entry strong { overflow-wrap:anywhere; }
+  .order-entry p { margin:0; font-size:13px; overflow-wrap:anywhere; white-space:pre-wrap; }
+  .task-design-heading { margin:16px 0 7px; padding:10px 12px; border-radius:9px; background:var(--accent-bg); color:var(--accent); font-size:16px; font-weight:700; }
+  @media (min-width:700px) { .main-nav { grid-template-columns:repeat(6,minmax(0,1fr)); } .design-picker-options { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 </style>
 </head>
 <body>
@@ -1698,6 +1742,7 @@
   <button type="button" data-view="blank">未プリント</button>
   <button type="button" data-view="sheets">シート</button>
   <button type="button" data-view="plan">制作タスク</button>
+  <button type="button" data-view="orders">Orders</button>
   <button type="button" data-view="costs">原価</button>
 </nav>
 
@@ -1742,6 +1787,7 @@
           <select id="finished-add-mode" class="master-select">
             <option value="adjust">在庫調整（完成品だけ増やす）</option>
             <option value="inhouse_stock">自社制作 → 在庫へ追加</option>
+            <option value="outsourced_stock">外注品の入庫（完成品だけ増やす）</option>
             <option value="inhouse_order">オーダー品 → 直接納品</option>
           </select>
         </div>
@@ -1762,8 +1808,16 @@
   </div>
   <div id="stock-summary"></div>
   <div class="export-row"><button class="export-btn" id="export-inventory-btn" type="button">在庫CSVを書き出す</button></div>
-  <div class="tabs" id="design-tabs"></div>
-  <div id="app"></div>
+  <div class="inventory-mode-switch" role="group" aria-label="在庫表示方法">
+    <button type="button" id="inventory-design-mode" class="secondary-btn">Design別</button>
+    <button type="button" id="inventory-list-mode" class="secondary-btn">在庫一覧・チェック</button>
+  </div>
+  <div id="inventory-overview" hidden></div>
+  <div id="inventory-design-panel">
+    <div class="tabs" id="design-tabs"></div>
+    <div id="app"></div>
+    <div id="design-combinations"></div>
+  </div>
   <div class="add-row legacy-editor-row">
     <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
     <button class="icon-btn" id="add-color-btn">＋</button>
@@ -1823,6 +1877,12 @@
   <div id="task-order-list"></div>
   <div id="task-add-area"></div>
   <div id="plan-app"></div>
+</section>
+
+<section id="view-orders" class="view-panel" hidden lang="en">
+  <div class="section-title">Customer Orders</div>
+  <div class="section-note">Quick notes for customer requests. Saving an order does not change inventory, create a production task, or record a sale.</div>
+  <div id="customer-orders-app"></div>
 </section>
 
 <section id="view-costs" class="view-panel" hidden>
@@ -2339,7 +2399,8 @@ let state = {
   blankBodyId: LEGACY_BODY_ID,
   assignBodyId: '',
   finishedBodyId: '',
-  finishedAddMode: 'adjust'
+  finishedAddMode: 'adjust',
+  finishedDisplayMode: 'design'
 };
 
 // 入荷チェックは画面上の一時選択。Firestoreには保存しない。
@@ -3073,12 +3134,13 @@ function renderFinishedAddMode(){
   const select = document.getElementById('finished-add-mode');
   const note = document.getElementById('finished-add-mode-note');
   if(!select || !note) return;
-  const allowed = ['adjust','inhouse_stock','inhouse_order'];
+  const allowed = ['adjust','inhouse_stock','outsourced_stock','inhouse_order'];
   if(!allowed.includes(state.finishedAddMode)) state.finishedAddMode = 'adjust';
   select.value = state.finishedAddMode;
   const notes = {
     adjust: '在庫調整：＋で完成品だけ +1。未プリントBody・シートは変動しません。−は完成品だけ -1 です。',
     inhouse_stock: '自社制作：＋で完成品 +1、同じBody・Color・Sizeの未プリントBody -1、必要なメイン／サブシート -1。',
+    outsourced_stock: '外注入庫：＋で完成品だけ +1。未プリントBody・シートは変動しません。',
     inhouse_order: 'オーダー品：＋で未プリントBody -1、必要なメイン／サブシート -1。直接納品扱いなので完成品在庫は増やしません。'
   };
   note.textContent = notes[state.finishedAddMode];
@@ -3089,9 +3151,9 @@ async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
   const cm = masterColorByName(colorName);
   const sm = masterSizeByName(sizeName);
   if(!dm || !cm || !sm || !bodyId) return false;
-  const mode = ['adjust','inhouse_stock','inhouse_order'].includes(state.finishedAddMode) ? state.finishedAddMode : 'adjust';
+  const mode = ['adjust','inhouse_stock','outsourced_stock','inhouse_order'].includes(state.finishedAddMode) ? state.finishedAddMode : 'adjust';
 
-  if(mode === 'adjust'){
+  if(mode === 'adjust' || mode === 'outsourced_stock'){
     const inventory = structuredClone(masterDocument?.inventory_v2 || {});
     const current = masterInventoryQty(bodyId, dm.id, cm.id, sm.id);
     const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1);
@@ -4453,9 +4515,10 @@ function renderProductionTasks(){
   const defaultColor = colors[0]?.id || '';
   const defaultBody = masterDocument?.masters?.colors?.[defaultColor]?.bodyId || bodies[0]?.id || '';
   addBox.innerHTML = `<div class="task-add-card"><div class="task-add-title">タスクを追加</div><div class="task-add-grid">
-    <div><label class="field-label">Design</label><select id="task-add-design">${designs.map(x=>`<option value="${escapeHtml(x.id)}">${x.starred?'★ ':''}${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
-    <div><label class="field-label">Color</label><select id="task-add-color">${colors.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
+    <div><label class="field-label">Design</label><input id="task-design-search" class="task-design-search" type="search" placeholder="Designを検索" aria-label="Designを検索"><select id="task-add-design">${designs.map(x=>`<option value="${escapeHtml(x.id)}">${x.starred?'★ ':''}${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
     <div><label class="field-label">Body</label><select id="task-add-body-select">${bodies.map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===defaultBody?'selected':''}>${escapeHtml(x.managementName || x.id)}</option>`).join('')}</select></div>
+    <div><label class="field-label">Color</label><select id="task-add-color">${colors.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName)}</option>`).join('')}</select></div>
+    <div class="task-field-wide" style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:7px;font-size:13px;"><input id="task-show-all-combos" type="checkbox" style="width:20px;height:20px;"> 例外のBody・Colorも選ぶ（すべて表示）</label></div>
     <div><label class="field-label">制作方法</label><select id="task-add-method"><option value="inhouse">自社制作</option><option value="outsourced">外注</option></select></div>
     <div><label class="field-label">用途</label><select id="task-add-purpose" class="task-purpose-select"><option value="stock">在庫用</option><option value="order">オーダー品</option></select></div>
     <div class="task-field-wide" style="grid-column:1/-1;"><label class="field-label">Size・数量</label><div class="task-size-entry-grid">${sizes.map(size => `
@@ -4474,11 +4537,22 @@ function renderProductionTasks(){
 
   const colorSelect = document.getElementById('task-add-color');
   const designSelect = document.getElementById('task-add-design');
+  document.getElementById('task-design-search')?.addEventListener('input', e=>{
+    const query=e.target.value.toLowerCase().trim();
+    const matches=[...designSelect.options].filter(option=>{
+      option.hidden=!!query && !option.textContent.toLowerCase().includes(query);
+      return !option.hidden;
+    });
+    if(query && matches.length && designSelect.selectedOptions[0]?.hidden){
+      designSelect.value=matches[0].value;
+      designSelect.dispatchEvent(new Event('change'));
+    }
+  });
   const methodSelect = document.getElementById('task-add-method');
   const purposeSelect = document.getElementById('task-add-purpose');
   const bodySelect = document.getElementById('task-add-body-select');
   const capacityLabel = document.getElementById('task-add-capacity');
-  let bodyManuallySelected = false;
+  const showAllCombos = document.getElementById('task-show-all-combos');
   const refreshResource = () => {
     const colorId = colorSelect?.value || defaultColor;
     const designId = designSelect?.value || defaultDesign;
@@ -4506,16 +4580,15 @@ function renderProductionTasks(){
         ? `メイン ${mainSheetQty}枚 / サブ ${subSheetQty}枚。両方1枚ずつ使うため、少ない方を基準に制作可能数を計算します。`
         : `シート在庫 ${mainSheetQty}枚。各サイズのBody在庫と照合して制作可能数を表示しています。`)) + orderNote;
   };
-  refreshResource();
-  colorSelect?.addEventListener('change', () => {
-    if(!bodyManuallySelected){
-      const suggested = masterDocument?.masters?.colors?.[colorSelect.value]?.bodyId || '';
-      if(suggested && bodies.some(b => b.id === suggested)) bodySelect.value = suggested;
-    }
+  const refreshTaskCombos = () => {
+    populatePreferredVariantSelects(designSelect.value,bodySelect,colorSelect,Boolean(showAllCombos?.checked));
     refreshResource();
-  });
-  bodySelect?.addEventListener('change', () => { bodyManuallySelected = true; refreshResource(); });
-  designSelect?.addEventListener('change', refreshResource);
+  };
+  refreshTaskCombos();
+  colorSelect?.addEventListener('change', refreshResource);
+  bodySelect?.addEventListener('change', refreshTaskCombos);
+  designSelect?.addEventListener('change', refreshTaskCombos);
+  showAllCombos?.addEventListener('change', refreshTaskCombos);
   methodSelect?.addEventListener('change', refreshResource);
   purposeSelect?.addEventListener('change', refreshResource);
 
@@ -4555,6 +4628,7 @@ function renderProductionTasks(){
   });
 
   const rows = res.rows;
+  let previousTaskDesign = '';
   listBox.innerHTML = rows.length ? `<div class="task-list">${rows.map(task => {
     const bodyStock = blankQtyForTask(task);
     const mainSheetStock = sheetQtyForTask(task);
@@ -4569,7 +4643,10 @@ function renderProductionTasks(){
       : (needsSub
         ? `Body在庫 ${bodyStock}枚 / メイン ${mainSheetStock}枚 / サブ ${subSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`
         : `Body在庫 ${bodyStock}枚 / シート在庫 ${mainSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`)) + orderText;
-    return `<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div><div class="task-badge-group"><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span>${task.purpose==='order'?'<span class="task-purpose-badge">オーダー品</span>':''}</div></div>
+    const designHeading = previousTaskDesign !== task.designId
+      ? `<div class="task-design-heading">${escapeHtml(task.designName)}</div>` : '';
+    previousTaskDesign = task.designId;
+    return `${designHeading}<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div><div class="task-badge-group"><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span>${task.purpose==='order'?'<span class="task-purpose-badge">オーダー品</span>':''}</div></div>
       <div class="task-card-controls"><div><label class="field-label">数量</label><div class="task-qty-control"><button class="mini-qty-btn" type="button" data-task-delta="-1" data-task-id="${escapeHtml(task.id)}">−</button><input class="task-qty-input" type="number" min="0" inputmode="numeric" data-task-qty="${escapeHtml(task.id)}" value="${task.qty}"><button class="mini-qty-btn" type="button" data-task-delta="1" data-task-id="${escapeHtml(task.id)}">＋</button></div></div><div><label class="field-label">方法</label><select class="task-method-select" data-task-method="${escapeHtml(task.id)}"><option value="inhouse" ${task.method==='inhouse'?'selected':''}>自社</option><option value="outsourced" ${task.method==='outsourced'?'selected':''}>外注</option></select></div><div><label class="field-label">用途</label><select class="task-purpose-select" data-task-purpose="${escapeHtml(task.id)}"><option value="stock" ${task.purpose==='stock'?'selected':''}>在庫用</option><option value="order" ${task.purpose==='order'?'selected':''}>オーダー品</option></select></div></div>
       <div class="task-resource-note ${canComplete?'':'warn'}">${escapeHtml(resourceText)}</div>
       <div class="task-action-row"><button class="task-complete-btn" type="button" data-task-complete="${escapeHtml(task.id)}" ${canComplete?'':'disabled'}>タスク完了</button><button class="task-delete-btn" type="button" data-task-delete="${escapeHtml(task.id)}">タスク削除</button></div>
@@ -6407,7 +6484,7 @@ async function renderCostMaster(forceLoad=false){
 }
 
 function setActiveView(view){
-  const allowed = ['finished','blank','sheets','plan','costs'];
+  const allowed = ['finished','blank','sheets','plan','orders','costs'];
   state.activeView = allowed.includes(view) ? view : 'finished';
   document.querySelectorAll('#main-nav button[data-view]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-view') === state.activeView));
   allowed.forEach(name => {
@@ -6416,6 +6493,264 @@ function setActiveView(view){
   });
   saveLocal();
   renderCurrentView();
+}
+
+
+// UI-only combinations are separate from canonical inventory. Never remove an SKU when hiding it.
+const inventoryReviewChecked = new Set();
+let reviewIncludeZero = false;
+let taskDesignFilter = '';
+function comboKey(bodyId, colorId){ return `${bodyId}|${colorId}`; }
+function designComboSettings(designId){
+  const record = masterDocument?.display_preferences?.[designId];
+  return Array.isArray(record?.pairs) ? record.pairs : null;
+}
+function proposedComboPairs(designId){
+  const pairs = new Set();
+  const stock = masterDocument?.inventory_v2 || {};
+  Object.entries(stock).forEach(([bodyId,tree]) => {
+    if(bodyId === LEGACY_BODY_ID) return;
+    Object.entries(tree?.[designId] || {}).forEach(([colorId,sizes]) => {
+      // Existing color keys remain candidates even if all sizes were counted down to zero.
+      pairs.add(comboKey(bodyId,colorId));
+    });
+  });
+  Object.values(masterDocument?.production_tasks || {}).forEach(task => {
+    if(task.designId === designId && task.bodyId && task.colorId) pairs.add(comboKey(task.bodyId,task.colorId));
+  });
+  return [...pairs];
+}
+function savedComboPairs(designId){ return designComboSettings(designId) ?? proposedComboPairs(designId); }
+const comboSeedPending = new Set();
+function seedInitialDesignCombos(designId){
+  if(!inventoryAuthorityActive() || !designId || designComboSettings(designId)!==null || comboSeedPending.has(designId))return;
+  const pairs=proposedComboPairs(designId);
+  if(!pairs.length)return;
+  comboSeedPending.add(designId);
+  Promise.resolve().then(async()=>{
+    // Only snapshot the initial combinations once. Subsequent edits take precedence.
+    if(designComboSettings(designId)!==null)return;
+    const preferences={...(masterDocument?.display_preferences||{})};
+    preferences[designId]={pairs,updatedAt:nowIso()};
+    const saved=await saveMasterData({display_preferences:preferences});
+    if(!saved)console.warn('Initial Design combinations could not be saved:',designId);
+  }).catch(error=>console.warn('Initial Design combination save failed:',error))
+    .finally(()=>comboSeedPending.delete(designId));
+}
+async function setSavedComboPairs(designId, pairs){
+  if(!inventoryAuthorityActive() || !designId) return false;
+  const preferences = {...(masterDocument?.display_preferences || {})};
+  preferences[designId] = { pairs:[...new Set(pairs)], updatedAt:nowIso() };
+  return (await saveMasterData({display_preferences: preferences})) !== false;
+}
+function comboPairQuantity(designId, pair){
+  const [bodyId,colorId] = pair.split('|');
+  return Object.values(masterDocument?.inventory_v2?.[bodyId]?.[designId]?.[colorId] || {})
+    .reduce((sum,cell)=>sum+Math.max(0,Number(cell?.qty||0)),0);
+}
+function renderDesignCombinations(){
+  const box = document.getElementById('design-combinations');
+  if(!box) return;
+  if(!inventoryAuthorityActive()) { box.innerHTML=''; return; }
+  const design = masterDesignByName(state.activeDesign);
+  if(!design){box.innerHTML='';return;}
+  const selected = savedComboPairs(design.id);
+  seedInitialDesignCombos(design.id);
+  const hidden = new Set(selected);
+  const bodies = assignableBodies(), colors = masterColors();
+  const bodyNames = masterDocument?.masters?.bodies || {};
+  const colorNames = masterDocument?.masters?.colors || {};
+  const archived = proposedComboPairs(design.id).filter(pair=>!hidden.has(pair));
+  box.innerHTML = `<details class="combo-panel" data-disclosure-key="combo-settings:${escapeHtml(design.id)}"><summary><strong>定番のBody・Colorを編集</strong> (${selected.length})</summary>
+    <div class="section-note" style="margin-top:8px;">表示設定のみ変更します。非表示にしても実在庫・SKU・制作タスクは残り、在庫一覧には表示されます。</div>
+    ${selected.map(pair=>{const [b,c]=pair.split('|'); const qty=comboPairQuantity(design.id,pair);return `<div class="combo-row"><span>${escapeHtml(bodyNames[b]?.managementName||b)} / ${escapeHtml(colorNames[c]?.managementName||c)}${qty?` · 在庫 ${qty}枚`:''}</span><button type="button" data-combo-hide="${escapeHtml(pair)}">非表示</button></div>`;}).join('') || '<div class="section-note">定番の組み合わせがありません。下から追加してください。</div>'}
+    <div class="combo-controls"><label class="field-label">Body<select id="combo-add-body">${bodies.map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===state.finishedBodyId?'selected':''}>${escapeHtml(b.managementName||b.id)}</option>`).join('')}</select></label>
+    <label class="field-label">Color<select id="combo-add-color">${colors.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.managementName||c.id)}</option>`).join('')}</select></label>
+    <button class="full" type="button" id="combo-add-btn">＋ 定番の組み合わせに追加</button></div>
+    ${archived.length?`<div class="section-note" style="margin-top:12px;">定番に含まれない在庫・タスクの組み合わせ</div>${archived.map(pair=>{const [b,c]=pair.split('|');return `<div class="combo-row"><span>${escapeHtml(bodyNames[b]?.managementName||b)} / ${escapeHtml(colorNames[c]?.managementName||c)}</span><button type="button" data-combo-restore="${escapeHtml(pair)}">再表示</button></div>`;}).join('')}`:''}
+  </details>`;
+  box.querySelectorAll('[data-combo-hide]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const pair=btn.getAttribute('data-combo-hide'); const qty=comboPairQuantity(design.id,pair);
+    if(qty && !confirm(`この組み合わせには完成品が ${qty}枚あります。Design別の表示から隠しますか？\n在庫一覧と実在庫には残ります。`))return;
+    btn.disabled=true;
+    if(await setSavedComboPairs(design.id,savedComboPairs(design.id).filter(x=>x!==pair))){render();renderDesignCombinations();}
+    else btn.disabled=false;
+  }));
+  box.querySelectorAll('[data-combo-restore]').forEach(btn=>btn.addEventListener('click',async()=>{
+    btn.disabled=true;
+    if(await setSavedComboPairs(design.id,[...savedComboPairs(design.id),btn.getAttribute('data-combo-restore')])){render();renderDesignCombinations();}
+    else btn.disabled=false;
+  }));
+  box.querySelector('#combo-add-btn')?.addEventListener('click',async e=>{
+    const pair=comboKey(box.querySelector('#combo-add-body')?.value||'',box.querySelector('#combo-add-color')?.value||'');
+    if(pair.startsWith('|') || pair.endsWith('|'))return;
+    e.currentTarget.disabled=true;
+    if(await setSavedComboPairs(design.id,[...savedComboPairs(design.id),pair])){render();renderDesignCombinations();}
+    else e.currentTarget.disabled=false;
+  });
+  applyDisclosureState(box);
+}
+function comboColorsForCurrentDesign(designName,bodyId){
+  if(!inventoryAuthorityActive())return state.designs?.[designName]?.colors || [];
+  const design=masterDesignByName(designName);
+  if(!design)return [];
+  const pairs=savedComboPairs(design.id);
+  const colors=masterDocument?.masters?.colors||{};
+  const names=[];
+  pairs.forEach(pair=>{
+    const [body,color]=pair.split('|');
+    if(bodyId && body!==bodyId)return;
+    const name=colors[color]?.legacyKey || colors[color]?.managementName;
+    if(name && !names.includes(name))names.push(name);
+  });
+  return names;
+}
+function allInventoryReviewRows(){
+  const rows=[];
+  const inventory=masterDocument?.inventory_v2 || {};
+  const bodies=masterDocument?.masters?.bodies || {}, designs=masterDocument?.masters?.designs || {};
+  const colors=masterDocument?.masters?.colors || {}, sizes=masterSizes();
+  const pairs=new Set();
+  Object.entries(inventory).forEach(([bodyId,designsTree])=>{
+    if(bodyId===LEGACY_BODY_ID)return;
+    Object.entries(designsTree||{}).forEach(([designId,colorsTree])=>{
+      Object.keys(colorsTree||{}).forEach(colorId=>pairs.add([bodyId,designId,colorId].join('|')));
+    });
+  });
+  if(reviewIncludeZero)Object.entries(masterDocument?.display_preferences||{}).forEach(([designId,config])=>{
+    (config?.pairs||[]).forEach(pair=>pairs.add(`${pair.split('|')[0]}|${designId}|${pair.split('|')[1]}`));
+  });
+  pairs.forEach(pair=>{
+    const [bodyId,designId,colorId]=pair.split('|');
+    if(!bodies[bodyId] || !designs[designId] || !colors[colorId])return;
+    if(state.finishedBodyId && state.finishedBodyId!==bodyId)return;
+    const sizeValues=sizes.map(size=>Math.max(0,Number(inventory?.[bodyId]?.[designId]?.[colorId]?.[size.id]?.qty||0)));
+    const total=sizeValues.reduce((a,b)=>a+b,0);
+    if(!reviewIncludeZero && total===0)return;
+    rows.push({pair, body:bodies[bodyId].managementName||bodyId, design:designs[designId].managementName||designId, color:colors[colorId].managementName||colorId, sizes:sizeValues,total});
+  });
+  return rows.sort((a,b)=>a.design.localeCompare(b.design,'ja')||a.body.localeCompare(b.body,'ja')||a.color.localeCompare(b.color,'ja'));
+}
+function renderInventoryOverview(){
+  const box=document.getElementById('inventory-overview');
+  if(!box)return;
+  if(!inventoryAuthorityActive()){box.innerHTML='<div class="inventory-review">実在庫マスターへの接続後に使用できます。</div>';return;}
+  const rows=allInventoryReviewRows();
+  const sizes=masterSizes();
+  const total=rows.reduce((sum,row)=>sum+row.total,0);
+  box.innerHTML=`<div class="inventory-review"><strong>完成品の在庫一覧</strong><p class="section-note">閲覧と確認用のチェックです。チェックしても在庫数は変わりません。非表示にした定番以外のSKUも表示します。</p>
+    <input class="review-search" id="review-search" type="search" placeholder="Design・Body・Colorで検索" aria-label="在庫一覧を検索">
+    <div class="review-actions"><label><input id="review-include-zero" type="checkbox" ${reviewIncludeZero?'checked':''}> 定番の在庫0も表示</label><button type="button" id="review-reset">確認チェックをリセット</button></div>
+    <p class="section-note">表は左右にスクロールできます。確認済チェックはこの画面だけのメモです。</p>
+    <div class="review-stats" id="review-stats">${rows.length}組み合わせ / ${total}枚 · 確認済 <span id="review-checked-count">${rows.filter(r=>inventoryReviewChecked.has(r.pair)).length}</span>件</div>
+    <div class="review-table-wrap"><table class="review-table"><thead><tr><th>確認</th><th>Design / Body / Color</th>${sizes.map(x=>`<th>${escapeHtml(x.managementName||x.id)}</th>`).join('')}<th>合計</th></tr></thead><tbody>${rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><td><input type="checkbox" aria-label="${escapeHtml(row.design)} ${escapeHtml(row.color)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}></td><td><strong>${escapeHtml(row.design)}</strong><br>${escapeHtml(row.body)} / ${escapeHtml(row.color)}</td>${row.sizes.map(n=>`<td>${n}</td>`).join('')}<td><strong>${row.total}</strong></td></tr>`).join('')}</tbody></table></div></div>`;
+  box.querySelector('#review-search')?.addEventListener('input',e=>{
+    const q=e.target.value.toLowerCase().trim();
+    box.querySelectorAll('[data-review-row]').forEach(tr=>{tr.hidden=!!q && !tr.getAttribute('data-search').includes(q);});
+  });
+  box.querySelector('#review-include-zero')?.addEventListener('change',e=>{reviewIncludeZero=e.target.checked;renderInventoryOverview();});
+  box.querySelector('#review-reset')?.addEventListener('click',()=>{inventoryReviewChecked.clear();renderInventoryOverview();});
+  box.querySelectorAll('[data-review-check]').forEach(input=>input.addEventListener('change',()=>{
+    const key=input.getAttribute('data-review-check');
+    if(input.checked)inventoryReviewChecked.add(key);else inventoryReviewChecked.delete(key);
+    input.closest('tr')?.classList.toggle('is-checked',input.checked);
+    box.querySelector('#review-checked-count').textContent=String(rows.filter(r=>inventoryReviewChecked.has(r.pair)).length);
+  }));
+}
+function renderFinishedDisplayMode(){
+  const listMode=state.finishedDisplayMode==='list';
+  const panel=document.getElementById('inventory-design-panel');
+  const list=document.getElementById('inventory-overview');
+  if(!panel || !list)return;
+  panel.hidden=listMode;
+  list.hidden=!listMode;
+  document.getElementById('inventory-design-mode')?.classList.toggle('is-current',!listMode);
+  document.getElementById('inventory-list-mode')?.classList.toggle('is-current',listMode);
+  if(listMode)renderInventoryOverview();
+}
+// Select known Design × Body × Color pairs without restricting legitimate exceptions.
+function populatePreferredVariantSelects(designId, bodySelect, colorSelect, showAll=false){
+  if(!bodySelect || !colorSelect)return;
+  const pairs=savedComboPairs(designId);
+  const limited=!showAll && pairs.length>0;
+  const availableBodies=assignableBodies().filter(body=>!limited || pairs.some(pair=>pair.startsWith(`${body.id}|`)));
+  const oldBody=bodySelect.value;
+  bodySelect.innerHTML=availableBodies.map(body=>`<option value="${escapeHtml(body.id)}">${escapeHtml(body.managementName||body.id)}</option>`).join('');
+  if(availableBodies.some(body=>body.id===oldBody))bodySelect.value=oldBody;
+  const selectedBody=bodySelect.value;
+  const availableColors=masterColors().filter(color=>!limited || pairs.includes(comboKey(selectedBody,color.id)));
+  const oldColor=colorSelect.value;
+  colorSelect.innerHTML=availableColors.map(color=>`<option value="${escapeHtml(color.id)}">${escapeHtml(color.managementName||color.id)}</option>`).join('');
+  if(availableColors.some(color=>color.id===oldColor))colorSelect.value=oldColor;
+}
+function orderId(){return `order_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;}
+function renderCustomerOrders(){
+  const box=document.getElementById('customer-orders-app');if(!box)return;
+  if(!masterReady || !masterDocument){box.innerHTML='<div class="order-panel">Sign in to save customer requests.</div>';return;}
+  const previousForm=box.querySelector('#customer-order-form');
+  const draft=previousForm ? Object.fromEntries(new FormData(previousForm)) : null;
+  const designs=masterDesigns(), bodies=assignableBodies(), colors=masterColors(),sizes=masterSizes();
+  const orders=Object.values(masterDocument.customer_orders || {}).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const options=(items,blank='Select')=>`<option value="">${blank}</option>`+items.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.managementName||x.id)}</option>`).join('');
+  const statuses=['New','In production','Ready','Shipped','Cancelled'];
+  box.innerHTML=`<div class="order-panel"><strong>New Order</strong><form id="customer-order-form" class="order-form" style="margin-top:12px;">
+   <label class="wide">Customer / Contact<input name="contact" maxlength="160" autocomplete="off" placeholder="Name or Instagram handle"></label>
+   <label>Design<select name="designId" required>${options(designs)}</select></label>
+   <label>Body<select name="bodyId" required>${options(bodies)}</select></label>
+   <label>Color<select name="colorId" required>${options(colors)}</select></label>
+   <label>Size<select name="sizeId" required>${options(sizes)}</select></label>
+   <label>Quantity<input name="qty" type="number" min="1" max="999" value="1" required inputmode="numeric"></label>
+   <label>Due date<input name="dueDate" type="date"></label>
+   <label class="wide">Source<select name="source"><option>Event</option><option>Instagram</option><option>Pinkoi</option><option>Email</option><option>Other</option></select></label>
+   <label class="wide">Notes<textarea name="notes" maxlength="3000" placeholder="Request details, shipping notes, follow-up…"></textarea></label>
+   <button class="wide" type="submit">Save Order</button>
+  </form><div id="customer-order-result" role="status" class="section-note"></div></div>
+  <div class="order-panel"><strong>Orders (${orders.length})</strong>${orders.length?orders.map(order=>{
+    const d=masterDocument.masters?.designs?.[order.designId]?.managementName||order.designId;
+    const b=masterDocument.masters?.bodies?.[order.bodyId]?.managementName||order.bodyId;
+    const c=masterDocument.masters?.colors?.[order.colorId]?.managementName||order.colorId;
+    const z=masterDocument.masters?.sizes?.[order.sizeId]?.managementName||order.sizeId;
+    return `<div class="order-entry"><div class="order-entry-head"><strong>${escapeHtml(d)} · ${escapeHtml(z)} × ${Number(order.qty)||0}</strong><select class="order-action" data-order-status="${escapeHtml(order.id)}" aria-label="Order status">${statuses.map(st=>`<option ${st===order.status?'selected':''}>${st}</option>`).join('')}</select></div><p>${escapeHtml(b)} / ${escapeHtml(c)}</p><p>${escapeHtml(order.contact||'No contact')} · ${escapeHtml(order.source||'Event')}${order.dueDate?' · Due '+escapeHtml(order.dueDate):''}</p>${order.notes?`<p>${escapeHtml(order.notes)}</p>`:''}<small>${escapeHtml(order.createdAt?.slice(0,10)||'')}</small>
+      <details data-disclosure-key="order-edit:${escapeHtml(order.id)}"><summary>Edit details</summary><form class="order-form" data-order-edit="${escapeHtml(order.id)}" style="margin-top:10px;">
+        <label class="wide">Customer / Contact<input name="contact" maxlength="160" value="${escapeHtml(order.contact||'')}"></label>
+        <label class="wide">Due date<input name="dueDate" type="date" value="${escapeHtml(order.dueDate||'')}"></label>
+        <label class="wide">Notes<textarea name="notes" maxlength="3000">${escapeHtml(order.notes||'')}</textarea></label>
+        <button class="wide" type="submit">Save Changes</button>
+      </form></details></div>`;
+  }).join(''):'<p class="section-note">No orders yet.</p>'}</div>`;
+  const form=box.querySelector('#customer-order-form');
+  if(draft && form){ Object.entries(draft).forEach(([name,value])=>{const control=form.elements.namedItem(name); if(control)control.value=value;}); }
+  form?.addEventListener('submit',async e=>{
+    e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;
+    const f=new FormData(form),qty=Number(f.get('qty'));
+    if(!Number.isInteger(qty)||qty<1||qty>999){alert('Enter a valid quantity.');button.disabled=false;return;}
+    const id=orderId();
+    const order={id,contact:String(f.get('contact')||'').trim(),designId:String(f.get('designId')||''),bodyId:String(f.get('bodyId')||''),colorId:String(f.get('colorId')||''),sizeId:String(f.get('sizeId')||''),qty,dueDate:String(f.get('dueDate')||''),source:String(f.get('source')||'Event'),notes:String(f.get('notes')||'').trim(),status:'New',createdAt:nowIso(),updatedAt:nowIso()};
+    if(!order.designId || !order.bodyId || !order.colorId || !order.sizeId){alert('Select Design, Body, Color and Size.');button.disabled=false;return;}
+    const next={...(masterDocument.customer_orders||{}),[id]:order};
+    if(await saveMasterData({customer_orders:next})){
+      form.reset();
+      renderCustomerOrders();
+    }else{alert('Order could not be saved. Please retry.');button.disabled=false;}
+  });
+  box.querySelectorAll('[data-order-status]').forEach(select=>select.addEventListener('change',async()=>{
+    select.disabled=true;const id=select.getAttribute('data-order-status');const current=masterDocument.customer_orders?.[id];if(!current)return;
+    const next={...(masterDocument.customer_orders||{}),[id]:{...current,status:select.value,updatedAt:nowIso()}};
+    if(await saveMasterData({customer_orders:next}))renderCustomerOrders();
+    else{alert('Status could not be saved.');select.disabled=false;}
+  }));
+  box.querySelectorAll('[data-order-edit]').forEach(editForm=>editForm.addEventListener('submit',async e=>{
+    e.preventDefault();const id=editForm.getAttribute('data-order-edit');
+    const current=masterDocument.customer_orders?.[id];if(!current)return;
+    const btn=editForm.querySelector('[type=submit]');btn.disabled=true;
+    const values=new FormData(editForm);
+    const next={...(masterDocument.customer_orders||{}),[id]:{
+      ...current,contact:String(values.get('contact')||'').trim(),dueDate:String(values.get('dueDate')||''),notes:String(values.get('notes')||'').trim(),updatedAt:nowIso()
+    }};
+    if(await saveMasterData({customer_orders:next}))renderCustomerOrders();
+    else{alert('Changes could not be saved.');btn.disabled=false;}
+  }));
+  applyDisclosureState(box);
 }
 
 function renderCurrentView(){
@@ -6428,6 +6763,8 @@ function renderCurrentView(){
     renderFinishedBodySelector();
     renderTabs();
     render();
+    renderDesignCombinations();
+    renderFinishedDisplayMode();
   } else if(state.activeView === 'assign'){
     renderBodyAssignment();
   } else if(state.activeView === 'blank'){
@@ -6436,6 +6773,8 @@ function renderCurrentView(){
     renderSheetInventory();
   } else if(state.activeView === 'plan'){
     renderProductionTasks();
+  } else if(state.activeView === 'orders'){
+    renderCustomerOrders();
   } else if(state.activeView === 'costs'){
     renderCostMaster();
   }
@@ -6513,7 +6852,8 @@ function saveLocal(){
       blankBodyId: state.blankBodyId,
       assignBodyId: state.assignBodyId,
       finishedBodyId: state.finishedBodyId,
-      finishedAddMode: state.finishedAddMode
+      finishedAddMode: state.finishedAddMode,
+      finishedDisplayMode: state.finishedDisplayMode
     }));
   } catch(e){
     console.error('local save failed', e);
@@ -6596,22 +6936,20 @@ function sortedDesignNames(){
 }
 
 function renderTabs(){
-  const tabs = document.getElementById('design-tabs');
-  let html = '';
-  sortedDesignNames().forEach(name => {
-    const active = name === state.activeDesign;
-    const star = state.designs[name].starred ? '<span class="tab-star">★</span>' : '';
-    html += `<button class="tab ${active ? 'active' : ''}" data-select-design="${name}">${star}${name}</button>`;
+  const tabs=document.getElementById('design-tabs');
+  if(!tabs)return;
+  const names=sortedDesignNames();
+  tabs.innerHTML=`<details class="design-picker" data-disclosure-key="finished-design-picker"><summary><span><small style="display:block;font-size:11px;color:var(--text-secondary);font-weight:400;">現在のDesign</small>${escapeHtml(state.activeDesign||'Designを選択')}</span><span>変更 ▾</span></summary><input id="design-picker-search" class="design-picker-search" type="search" placeholder="Designを検索" aria-label="Designを検索"><div class="design-picker-options">${names.map(name=>`<button type="button" data-select-design="${escapeHtml(name)}" class="${name===state.activeDesign?'selected':''}">${state.designs[name]?.starred?'★ ':''}${escapeHtml(name)}</button>`).join('')}</div></details>`;
+  tabs.querySelector('#design-picker-search')?.addEventListener('input',e=>{
+    const q=e.target.value.trim().toLowerCase();
+    tabs.querySelectorAll('[data-select-design]').forEach(btn=>{btn.hidden=!!q && !btn.textContent.toLowerCase().includes(q);});
   });
-  tabs.innerHTML = html;
-  tabs.querySelectorAll('button[data-select-design]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.activeDesign = btn.getAttribute('data-select-design');
-      renderTabs();
-      render();
-      saveLocal();
-    });
-  });
+  tabs.querySelectorAll('[data-select-design]').forEach(btn=>btn.addEventListener('click',()=>{
+    state.activeDesign=btn.getAttribute('data-select-design');
+    disclosureState['finished-design-picker']=false; saveDisclosureState();
+    renderTabs();render();renderDesignCombinations();saveLocal();
+  }));
+  applyDisclosureState(tabs);
 }
 
 function render(){
@@ -6644,14 +6982,14 @@ function render(){
     <button class="star-btn ${d.starred ? 'active' : ''}" id="star-priority-btn" type="button">${d.starred ? '★ 優先' : '☆ 優先'}</button>
   </div>`;
 
-  const visibleColors = inventoryAuthorityActive() && selectedBodyId
-    ? colorsForBody(design, selectedBodyId)
+  const visibleColors = inventoryAuthorityActive()
+    ? comboColorsForCurrentDesign(design, selectedBodyId)
     : d.colors;
 
   if(visibleColors.length > 0){
     html += '<div class="size-header">' + SIZES.map(s => `<div>${s}</div>`).join('') + '</div>';
   } else {
-    html += '<p class="empty-note">このBodyに紐づくColorはありません。Color設定を確認してください。</p>';
+    html += '<p class="empty-note">このDesignの定番組み合わせは未設定です。下の「定番のBody・Colorを編集」から追加してください。</p>';
   }
 
   visibleColors.forEach(color => {
@@ -6669,9 +7007,9 @@ function render(){
               : 0;
           }
           return `<div class="size-cell">
-            <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="-1">−</button>
+            <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="-1" ${inventoryAuthorityActive() && !selectedBodyId?'disabled title="Bodyを選択してください"':''}>−</button>
             <span class="qty-val">${qty}</span>
-            <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="1">＋</button>
+            <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="1" ${inventoryAuthorityActive() && !selectedBodyId?'disabled title="Bodyを選択してください"':''}>＋</button>
           </div>`;
         }).join('')}
       </div>
@@ -6702,6 +7040,7 @@ function render(){
       }
       renderTabs();
       render();
+      renderDesignCombinations();
     });
   }
 
@@ -6830,6 +7169,8 @@ document.getElementById('finished-body-select').addEventListener('change', e => 
   saveLocal();
   renderTabs();
   render();
+  renderDesignCombinations();
+  if(state.finishedDisplayMode === 'list') renderInventoryOverview();
 });
 
 document.getElementById('finished-add-mode')?.addEventListener('change', e => {
@@ -6855,6 +7196,13 @@ document.getElementById('purchase-email-preview-btn')?.addEventListener('click',
   renderPurchaseEmailPreview(purchaseEmailPreviewData);
 });
 
+document.getElementById('inventory-design-mode')?.addEventListener('click',()=>{
+  state.finishedDisplayMode='design';saveLocal();renderFinishedDisplayMode();
+});
+document.getElementById('inventory-list-mode')?.addEventListener('click',()=>{
+  state.finishedDisplayMode='list';saveLocal();renderFinishedDisplayMode();
+});
+
 document.getElementById('purchase-email-apply-btn')?.addEventListener('click', async e => {
   e.currentTarget.disabled = true;
   const ok = await applyPurchaseEmailPreview();
@@ -6878,18 +7226,20 @@ async function init(){
       if(ui.blankBodyId) state.blankBodyId = ui.blankBodyId;
       if(ui.assignBodyId) state.assignBodyId = ui.assignBodyId;
       if(ui.finishedBodyId) state.finishedBodyId = ui.finishedBodyId;
+      if(ui.finishedDisplayMode) state.finishedDisplayMode = ui.finishedDisplayMode;
     }
   } catch(e) {
     console.log('no existing local data, using defaults');
   }
 
   if(!state.sortMode) state.sortMode = 'priority';
+  if(!['design','list'].includes(state.finishedDisplayMode))state.finishedDisplayMode='design';
   if(!state.activeView) state.activeView = 'finished';
   if(!state.activePlanDesign) state.activePlanDesign = state.activeDesign || Object.keys(state.designs)[0];
   if(!state.blankBodyId) state.blankBodyId = LEGACY_BODY_ID;
   if(state.assignBodyId == null) state.assignBodyId = '';
   if(state.finishedBodyId == null) state.finishedBodyId = '';
-  if(!['adjust','inhouse_stock','inhouse_order'].includes(state.finishedAddMode)) state.finishedAddMode = 'adjust';
+  if(!['adjust','inhouse_stock','outsourced_stock','inhouse_order'].includes(state.finishedAddMode)) state.finishedAddMode = 'adjust';
   Object.values(state.designs).forEach(d => {
     if(d.starred == null) d.starred = Number(d.priority) === 1;
     if(!d.planned) d.planned = {};
