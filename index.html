@@ -1691,13 +1691,26 @@
   .combo-controls button { min-height:44px; border:1px solid var(--accent); border-radius:9px; background:var(--accent-bg); color:var(--accent); }
   .review-stats { margin:10px 0; font-size:13px; color:var(--text-secondary); }
   .review-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; }
-  .review-table-wrap { max-width:100%; overflow:auto; border:1px solid var(--border); border-radius:10px; }
-  .review-table { border-collapse:collapse; width:100%; min-width:595px; font-size:12px; }
-  .review-table th,.review-table td { border-bottom:1px solid var(--border); padding:9px 7px; text-align:center; white-space:nowrap; }
-  .review-table td:nth-child(2),.review-table th:nth-child(2) { text-align:left; }
-  .review-table th { position:sticky; top:0; z-index:1; background:var(--accent-bg); }
-  .review-table tr.is-checked { background:var(--accent-bg); }
-  .review-table input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
+  .review-table-wrap { max-width:100%; overflow-x:auto; overflow-y:visible; border:1px solid var(--border); border-radius:10px; -webkit-overflow-scrolling:touch; }
+  .review-table { border-collapse:separate; border-spacing:0; width:100%; min-width:355px; font-size:13px; font-variant-numeric:tabular-nums; }
+  .review-table th,.review-table td { border-bottom:1px solid var(--border); padding:10px 5px; text-align:center; white-space:nowrap; }
+  .review-table thead th { position:sticky; top:0; z-index:2; background:var(--accent-bg); font-weight:700; }
+  .review-table th:first-child { position:sticky; left:0; z-index:1; min-width:116px; max-width:148px; text-align:left; white-space:normal; background:var(--card); box-shadow:1px 0 0 var(--border); }
+  .review-table thead th:first-child { z-index:3; background:var(--accent-bg); }
+  .review-table td { min-width:38px; }
+  .review-table td:last-child { font-weight:700; min-width:39px; }
+  .review-table .review-design-row th,.review-table .review-design-row td { background:var(--accent-bg); font-weight:700; border-top:2px solid var(--border); }
+  .review-table .review-design-row:first-child th,.review-table .review-design-row:first-child td { border-top:0; }
+  .review-table .review-design-row th { color:var(--accent); }
+  .review-design-name { display:block; overflow-wrap:anywhere; font-size:14px; line-height:1.35; }
+  .review-design-count { display:block; margin-top:3px; color:var(--text-secondary); font-size:11px; font-weight:400; }
+  .review-variant-label { display:flex; gap:6px; align-items:center; min-height:28px; }
+  .review-variant-label span { min-width:0; overflow-wrap:anywhere; line-height:1.35; }
+  .review-variant-label small { display:block; font-size:11px; color:var(--text-secondary); margin-top:2px; }
+  .review-table .review-zero { color:var(--text-muted); }
+  .review-table tr.is-checked,.review-table tr.is-checked th { background:var(--accent-bg); }
+  .review-table input[type=checkbox] { flex:none; width:22px; height:22px; accent-color:var(--accent); }
+  .review-no-match { margin:12px 0 0; color:var(--text-secondary); font-size:13px; }
   .order-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
   .order-form label { font-size:12px; color:var(--text-secondary); display:grid; gap:4px; }
   .order-form .wide { grid-column:1/-1; }
@@ -6637,25 +6650,67 @@ function renderInventoryOverview(){
   if(!inventoryAuthorityActive()){box.innerHTML='<div class="inventory-review">実在庫マスターへの接続後に使用できます。</div>';return;}
   const rows=allInventoryReviewRows();
   const sizes=masterSizes();
-  const total=rows.reduce((sum,row)=>sum+row.total,0);
-  box.innerHTML=`<div class="inventory-review"><strong>完成品の在庫一覧</strong><p class="section-note">閲覧と確認用のチェックです。チェックしても在庫数は変わりません。非表示にした定番以外のSKUも表示します。</p>
+  // The vertical axis is Design; each Design gets a size-by-size subtotal followed
+  // by its Body / Color variants. This is presentation only, not a stock mutation.
+  const groups=new Map();
+  rows.forEach(row=>{
+    const designId=row.pair.split('|')[1];
+    if(!groups.has(designId))groups.set(designId,{designId,name:row.design,rows:[]});
+    groups.get(designId).rows.push(row);
+  });
+  const numberCell=n=>`<td class="${n===0?'review-zero':''}">${n}</td>`;
+  box.innerHTML=`<div class="inventory-review"><strong>完成品の在庫一覧</strong><p class="section-note">Designを縦に、Sizeを横に並べました。Design行が各Sizeの合計、その下がBody・Color別です。確認チェックは在庫数を変更しません。</p>
     <input class="review-search" id="review-search" type="search" placeholder="Design・Body・Colorで検索" aria-label="在庫一覧を検索">
     <div class="review-actions"><label><input id="review-include-zero" type="checkbox" ${reviewIncludeZero?'checked':''}> 定番の在庫0も表示</label><button type="button" id="review-reset">確認チェックをリセット</button></div>
-    <p class="section-note">表は左右にスクロールできます。確認済チェックはこの画面だけのメモです。</p>
-    <div class="review-stats" id="review-stats">${rows.length}組み合わせ / ${total}枚 · 確認済 <span id="review-checked-count">${rows.filter(r=>inventoryReviewChecked.has(r.pair)).length}</span>件</div>
-    <div class="review-table-wrap"><table class="review-table"><thead><tr><th>確認</th><th>Design / Body / Color</th>${sizes.map(x=>`<th>${escapeHtml(x.managementName||x.id)}</th>`).join('')}<th>合計</th></tr></thead><tbody>${rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><td><input type="checkbox" aria-label="${escapeHtml(row.design)} ${escapeHtml(row.color)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}></td><td><strong>${escapeHtml(row.design)}</strong><br>${escapeHtml(row.body)} / ${escapeHtml(row.color)}</td>${row.sizes.map(n=>`<td>${n}</td>`).join('')}<td><strong>${row.total}</strong></td></tr>`).join('')}</tbody></table></div></div>`;
-  box.querySelector('#review-search')?.addEventListener('input',e=>{
-    const q=e.target.value.toLowerCase().trim();
-    box.querySelectorAll('[data-review-row]').forEach(tr=>{tr.hidden=!!q && !tr.getAttribute('data-search').includes(q);});
-  });
+    <p class="section-note">サイズが収まらない場合は表を左右にスクロールできます。左端のDesign / Body・Colorは固定です。</p>
+    <div class="review-stats" id="review-stats"><span id="review-summary"></span> · 確認済 <span id="review-checked-count">0</span>件</div>
+    <div class="review-table-wrap"><table class="review-table" aria-label="Design別・Size別の完成品在庫"><thead><tr><th scope="col">Design<br>Body / Color</th>${sizes.map(x=>`<th scope="col">${escapeHtml(x.managementName||x.id)}</th>`).join('')}<th scope="col">計</th></tr></thead>${Array.from(groups.values()).map(group=>{
+      const sumBySize=sizes.map((_,i)=>group.rows.reduce((sum,row)=>sum+row.sizes[i],0));
+      const sum=sumBySize.reduce((a,b)=>a+b,0);
+      const count=group.rows.filter(row=>inventoryReviewChecked.has(row.pair)).length;
+      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span></th>${sumBySize.map(numberCell).join('')}<td>${sum}</td></tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small></span></label></th>${row.sizes.map(numberCell).join('')}<td>${row.total}</td></tr>`).join('')}</tbody>`;
+    }).join('')}</table></div><p class="review-no-match" id="review-no-match" hidden>該当する組み合わせはありません。</p></div>`;
+  const updateReviewDisplay=()=>{
+    const q=box.querySelector('#review-search')?.value.toLowerCase().trim()||'';
+    let visibleCount=0,visibleTotal=0,checkedCount=0;
+    box.querySelectorAll('[data-review-design]').forEach(tbody=>{
+      const visible=[];
+      tbody.querySelectorAll('[data-review-row]').forEach(tr=>{
+        const match=!q||tr.getAttribute('data-search').includes(q);
+        tr.hidden=!match;
+        if(match)visible.push(tr);
+      });
+      tbody.hidden=!visible.length;
+      if(!visible.length)return;
+      const totals=sizes.map((_,i)=>visible.reduce((sum,tr)=>sum+Number(tr.children[i+1].textContent||0),0));
+      const grandTotal=totals.reduce((a,b)=>a+b,0);
+      const confirmed=visible.filter(tr=>tr.querySelector('[data-review-check]')?.checked).length;
+      const header=tbody.querySelector('.review-design-row');
+      header.querySelector('[data-review-design-count]').textContent=`${visible.length}組・確認済 ${confirmed}組`;
+      totals.forEach((n,i)=>{
+        const td=header.children[i+1];
+        td.textContent=String(n);
+        td.classList.toggle('review-zero',n===0);
+      });
+      header.lastElementChild.textContent=String(grandTotal);
+      visibleCount+=visible.length;visibleTotal+=grandTotal;checkedCount+=confirmed;
+    });
+    const selectedBody=masterDocument?.masters?.bodies?.[state.finishedBodyId]?.managementName;
+    const scope=selectedBody?`${selectedBody} / `:'全Body / ';
+    box.querySelector('#review-summary').textContent=`${scope}${visibleCount}組み合わせ / ${visibleTotal}枚`;
+    box.querySelector('#review-checked-count').textContent=String(checkedCount);
+    box.querySelector('#review-no-match').hidden=visibleCount>0;
+  };
+  box.querySelector('#review-search')?.addEventListener('input',updateReviewDisplay);
   box.querySelector('#review-include-zero')?.addEventListener('change',e=>{reviewIncludeZero=e.target.checked;renderInventoryOverview();});
   box.querySelector('#review-reset')?.addEventListener('click',()=>{inventoryReviewChecked.clear();renderInventoryOverview();});
   box.querySelectorAll('[data-review-check]').forEach(input=>input.addEventListener('change',()=>{
     const key=input.getAttribute('data-review-check');
     if(input.checked)inventoryReviewChecked.add(key);else inventoryReviewChecked.delete(key);
     input.closest('tr')?.classList.toggle('is-checked',input.checked);
-    box.querySelector('#review-checked-count').textContent=String(rows.filter(r=>inventoryReviewChecked.has(r.pair)).length);
+    updateReviewDisplay();
   }));
+  updateReviewDisplay();
 }
 function renderFinishedDisplayMode(){
   const listMode=state.finishedDisplayMode==='list';
