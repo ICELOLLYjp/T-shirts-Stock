@@ -1,0 +1,44 @@
+name: Apply verified inventory matrix UI
+on:
+  push:
+    branches:
+      - feature/tshirt-inventory-design-size-matrix-20260922
+    paths:
+      - '.github/workflows/apply-inventory-matrix.yml'
+permissions:
+  contents: write
+jobs:
+  apply-verified-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original blob, apply patch and validate JavaScript
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, pathlib, re, subprocess
+          expected_base = '81d0999671343c11fd9f727c95b0c4649447eb34'
+          expected_result = '8fe5279d9b3566f1ba093e19add21f2bee4696f2'
+          def blob():
+              return subprocess.check_output(['git','hash-object','index.html'],text=True).strip()
+          assert blob() == expected_base, f'index.html base changed: {blob()}'
+          encoded = pathlib.Path('.github/ui-updates/inventory-design-size-20260922.patch.gz.b64').read_text().strip()
+          patch = gzip.decompress(base64.b64decode(encoded))
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          assert blob() == expected_result, f'Unexpected result blob: {blob()}'
+          html = pathlib.Path('index.html').read_text()
+          match = re.search(r'<script type="module">([\s\S]*?)</script>',html)
+          assert match, 'Inline JavaScript module not found'
+          check = pathlib.Path('/tmp/tshirt-inventory-module.mjs')
+          check.write_text(match.group(1))
+          subprocess.run(['node','--check',str(check)],check=True)
+          assert 'data-review-design' in html and 'review-design-row' in html
+          print('PASS: base, patch, result blob and node --check')
+          PY
+      - name: Commit only the verified inventory layout
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Display inventory by Design rows and Size columns'
+          git push origin HEAD
