@@ -1,0 +1,49 @@
+name: Apply neutral gray background
+on:
+  push:
+    branches: [feature/neutral-gray-background-20260922]
+    paths: [.github/workflows/apply-neutral-gray.yml]
+permissions:
+  contents: write
+jobs:
+  apply-theme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update only background colors and verify
+        run: |
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          path = Path('index.html')
+          before = path.read_text()
+          assert subprocess.check_output(['git','hash-object','index.html'],text=True).strip() == '08293b76bd407d9e049a39e45eb92c4e1aba5b08', 'Unexpected version: stop to avoid overwriting recent edits'
+          replacements = [
+            ('  /* Quiet blush surfaces, high-contrast rose actions and restrained status colors. */', '  /* Neutral gray canvas with quiet blush accents and high-contrast rose actions. */'),
+            ('    --bg: #fff8fa;', '    --bg: #f3f4f6;'),
+            ('    --page-glow: #f6dce7;', '    --page-glow: #e8eaee;'),
+            ('    --nav-bg: #fff8fa;', '    --nav-bg: #f3f4f6;'),
+            ('      --bg: #241b23;', '      --bg: #202127;'),
+            ('      --page-glow: #4f3043;', '      --page-glow: #30323b;'),
+            ('      --nav-bg: #241b23;', '      --nav-bg: #202127;'),
+          ]
+          after=before
+          for old,new in replacements:
+              assert after.count(old)==1, old
+              after=after.replace(old,new,1)
+          scrub=lambda src: re.sub(r'<style>[\s\S]*?</style>', '<style>CSS</style>', src, count=1)
+          assert scrub(before)==scrub(after), 'Non-CSS content changed'
+          path.write_text(after)
+          assert subprocess.check_output(['git','hash-object','index.html'],text=True).strip() == 'e5d91f4c52bab813f5cbf1916804e0803c572149', 'Unexpected result: stop'
+          for script in re.findall(r'<script[^>]*>([\s\S]*?)</script>',after):
+              Path('/tmp/gray-theme-syntax.mjs').write_text(script)
+              subprocess.run(['node','--check','/tmp/gray-theme-syntax.mjs'],check=True)
+          print('PASS: only CSS changed; gray surfaces with pink accents; JavaScript syntax valid')
+          PY
+      - name: Commit verified gray theme
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Use neutral gray background while preserving blush accents'
+          git push
