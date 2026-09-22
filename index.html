@@ -8,31 +8,57 @@
 <meta name="apple-mobile-web-app-title" content="T在庫">
 <title>Tシャツ在庫管理</title>
 <style>
+  /* Quiet blush surfaces, high-contrast rose actions and restrained status colors. */
   :root {
-    --bg: #f4f3ef;
+    color-scheme: light;
+    --bg: #fff8fa;
     --card: #ffffff;
-    --border: #e2e0d8;
-    --text: #1f1e1c;
-    --text-secondary: #6b6a64;
-    --text-muted: #9a9890;
-    --accent: #185fa5;
-    --accent-bg: #e6f1fb;
-    --danger: #a32d2d;
-    --danger-bg: #fcebeb;
-    --radius: 10px;
+    --border: #e8d6df;
+    --text: #31242d;
+    --text-secondary: #64515c;
+    --text-muted: #796976;
+    --accent: #783a54;
+    --accent-bg: #f8e3eb;
+    --accent-solid: #783a54;
+    --accent-on-solid: #ffffff;
+    --pink-main: #edc4d2;
+    --pink-soft: #fceaf0;
+    --page-glow: #f6dce7;
+    --nav-bg: #fff8fa;
+    --success: #286f59;
+    --success-bg: #e8f5ef;
+    --info: #484378;
+    --info-bg: #eeedfa;
+    --danger: #a32d43;
+    --danger-bg: #fce9ed;
+    --shadow: 0 8px 28px rgba(88, 44, 65, .055);
+    --line: var(--border);
+    --radius: 12px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17161a;
-      --card: #232228;
-      --border: #35333a;
-      --text: #f1f0ec;
-      --text-secondary: #b4b2a9;
-      --text-muted: #77756e;
-      --accent: #85b7eb;
-      --accent-bg: #0c447c;
-      --danger: #f09595;
-      --danger-bg: #501313;
+      color-scheme: dark;
+      --bg: #241b23;
+      --card: #322731;
+      --border: #5e4855;
+      --text: #fff2f7;
+      --text-secondary: #e2cdd7;
+      --text-muted: #ceb9c4;
+      --accent: #ffd3e3;
+      --accent-bg: #513342;
+      --accent-solid: #edbed1;
+      --accent-on-solid: #31212b;
+      --pink-main: #70475a;
+      --pink-soft: #422d3a;
+      --page-glow: #4f3043;
+      --nav-bg: #241b23;
+      --success: #a6e4cb;
+      --success-bg: #28443b;
+      --info: #d4d0ff;
+      --info-bg: #383357;
+      --danger: #ffb1c0;
+      --danger-bg: #542d3a;
+      --shadow: 0 8px 28px rgba(9, 4, 11, .25);
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -1636,9 +1662,9 @@
   .cost-sku-picker { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
   .cost-sku-picker .full { grid-column:1/-1; }
   .cost-size-checks { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
-  .cost-size-check { display:flex; align-items:center; gap:7px; min-height:44px; padding:8px 13px; border:1px solid var(--line); border-radius:12px; background:#fff; font-weight:800; cursor:pointer; }
+  .cost-size-check { display:flex; align-items:center; gap:7px; min-height:44px; padding:8px 13px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); font-weight:800; cursor:pointer; }
   .cost-size-check input { width:20px; height:20px; margin:0; }
-  .cost-bulk-result { margin-top:10px; padding:10px 12px; border-radius:12px; background:#f1f7ff; color:#145d9d; font-weight:800; font-size:13px; line-height:1.55; }
+  .cost-bulk-result { margin-top:10px; padding:10px 12px; border-radius:12px; background:var(--success-bg); color:var(--success); font-weight:800; font-size:13px; line-height:1.55; }
   .cost-outsourced-overview { margin:10px 0; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--bg); }
   .cost-outsourced-overview-title { font-size:13px; font-weight:800; margin-bottom:7px; }
   .cost-outsourced-price-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
@@ -1736,6 +1762,97 @@
   .order-copy-status { font-size:12px; color:var(--text-secondary); }
   .task-design-heading { margin:16px 0 7px; padding:10px 12px; border-radius:9px; background:var(--accent-bg); color:var(--accent); font-size:16px; font-weight:700; }
   @media (min-width:700px) { .main-nav { grid-template-columns:repeat(6,minmax(0,1fr)); } .design-picker-options { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+  /* ICELOLLY blush theme: Stripe-inspired restraint, not Stripe branding. */
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse 110% 270px at 14% 0%, var(--page-glow) 0%, transparent 76%), var(--bg);
+    min-height: 100vh;
+  }
+  #inventory-shell > h1 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 23px;
+    font-weight: 750;
+    letter-spacing: -.035em;
+  }
+  #inventory-shell > h1::before {
+    content: '';
+    display: block;
+    flex: 0 0 7px;
+    height: 27px;
+    border-radius: 10px;
+    background: var(--accent-solid);
+  }
+  .auth-title { letter-spacing: -.03em; }
+  .auth-card, .stock-summary, .color-card, .production-summary,
+  .body-settings-panel, .color-settings-panel, .cost-section,
+  .design-picker, .combo-panel, .inventory-review, .order-panel {
+    box-shadow: var(--shadow);
+    border-radius: 14px;
+  }
+  .main-nav {
+    background: var(--nav-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0 10px;
+    gap: 7px;
+  }
+  .main-nav button {
+    border-radius: 10px;
+    min-height: 44px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .main-nav button.active {
+    border: 1px solid var(--accent-solid);
+    background: var(--accent-solid);
+    color: var(--accent-on-solid);
+    box-shadow: 0 3px 10px rgba(110, 52, 77, .13);
+  }
+  .inventory-mode-switch button.is-current,
+  .design-picker-options button.selected,
+  .tab.active,
+  .star-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .section-title, .cost-section-title {
+    letter-spacing: -.015em;
+    color: var(--text);
+  }
+  .stock-summary-value, .total-value, .mini-summary strong,
+  .finished-body-total strong { font-variant-numeric: tabular-nums; }
+  .master-badge, .task-design-heading { background: var(--pink-soft); color: var(--accent); }
+  .review-table thead th { background: var(--pink-soft); color: var(--text); }
+  .review-table thead th:first-child { background: var(--pink-soft); }
+  .review-table .review-design-row th,
+  .review-table .review-design-row td { background: var(--accent-bg); color: var(--text); }
+  .review-table .review-design-row th { color: var(--accent); }
+  .review-table tr.is-checked,
+  .review-table tr.is-checked th { background: var(--success-bg); }
+  .review-table .review-design-row.is-checked th,
+  .review-table .review-design-row.is-checked td { background: var(--accent-bg); }
+  .sync-status.ok { color: var(--success); }
+  .cost-status.ok, .cost-bulk-result { color: var(--success); background: var(--success-bg); }
+  .order-ems-summary { color: var(--info); background: var(--info-bg); }
+  .auth-btn.primary, .cost-save-btn, .order-form button[type="submit"] {
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+    color: var(--accent-on-solid);
+  }
+  .order-form button:not([type="submit"]) { background: var(--card); color: var(--accent); }
+  :is(button, input, select, textarea, summary):focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+  :is(input, select, textarea)::placeholder { color: var(--text-muted); opacity: 1; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    .main-nav button { transition: none; }
+  }
 </style>
 </head>
 <body>
