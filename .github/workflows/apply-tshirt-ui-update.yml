@@ -1,0 +1,34 @@
+name: Apply T-shirt UI update
+on:
+  push:
+    branches:
+      - feature/tshirt-ui-orders-stock-list-20260922
+    paths:
+      - .github/ui-updates/tshirt-ui-20260922.patch.gz.b64
+permissions:
+  contents: write
+jobs:
+  apply-verified-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/tshirt-ui-orders-stock-list-20260922
+      - name: Verify base and reconstruct HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object index.html)" = "e36f086e165939cc77aa83c15d5242588c503a6d"
+          base64 --decode .github/ui-updates/tshirt-ui-20260922.patch.gz.b64 | gzip -dc > /tmp/tshirt-ui.patch
+          git apply --check /tmp/tshirt-ui.patch
+          git apply /tmp/tshirt-ui.patch
+          test "$(git hash-object index.html)" = "81d0999671343c11fd9f727c95b0c4649447eb34"
+      - name: Commit updated index.html to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Improve T-shirt stock UX, Orders and inventory list"
+          git push origin HEAD:feature/tshirt-ui-orders-stock-list-20260922
