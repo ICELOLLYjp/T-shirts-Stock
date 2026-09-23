@@ -1936,6 +1936,33 @@
     background: var(--accent-solid);
     color: var(--accent-on-solid);
   }
+  .review-stock-input,
+  .qty-direct-input {
+    width: 48px;
+    min-width: 44px;
+    height: 32px;
+    padding: 0 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--text);
+    text-align: center;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .review-stock-input:focus,
+  .qty-direct-input:focus {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    outline: 2px solid var(--accent-bg);
+    outline-offset: 1px;
+  }
+  .review-stock-input.is-zero { color: var(--text-muted); }
+  .review-stock-input:disabled,
+  .qty-direct-input:disabled { opacity: .55; }
+  .review-table td:has(.review-stock-input) { padding: 4px 3px; }
   .management-tools {
     margin: 0 0 12px;
   }
@@ -2057,8 +2084,8 @@
   <div id="stock-summary"></div>
   <div class="export-row"><button class="export-btn" id="export-inventory-btn" type="button">在庫CSVを書き出す</button></div>
   <div class="inventory-mode-switch" role="group" aria-label="在庫表示方法">
-    <button type="button" id="inventory-design-mode" class="secondary-btn">Design別</button>
     <button type="button" id="inventory-list-mode" class="secondary-btn">在庫一覧・チェック</button>
+    <button type="button" id="inventory-design-mode" class="secondary-btn">Design別</button>
   </div>
   <div id="inventory-overview" hidden></div>
   <div id="inventory-design-panel">
@@ -2648,7 +2675,7 @@ let state = {
   assignBodyId: '',
   finishedBodyId: '',
   finishedAddMode: 'adjust',
-  finishedDisplayMode: 'design'
+  finishedDisplayMode: 'list'
 };
 
 // 入荷チェックは画面上の一時選択。Firestoreには保存しない。
@@ -3355,6 +3382,15 @@ async function saveMasterInventoryAndSync(inventory){
   return true;
 }
 
+async function setFinishedInventoryAbsolute(bodyId, designId, colorId, sizeId, requestedQty){
+  if(!inventoryAuthorityActive()) return false;
+  const qty = Number(requestedQty);
+  if(!Number.isInteger(qty) || qty < 0) return false;
+  const inventory = structuredClone(masterDocument?.inventory_v2 || {});
+  const next = setFinishedInventoryQtyTree(inventory, bodyId, designId, colorId, sizeId, qty);
+  return await saveMasterInventoryAndSync(next);
+}
+
 function renderFinishedBodySelector(){
   const select = document.getElementById('finished-body-select');
   const totalBox = document.getElementById('finished-body-total');
@@ -3386,7 +3422,7 @@ function renderFinishedAddMode(){
   if(!allowed.includes(state.finishedAddMode)) state.finishedAddMode = 'adjust';
   select.value = state.finishedAddMode;
   const notes = {
-    adjust: '在庫調整：＋で完成品だけ +1。未プリントBody・シートは変動しません。−は完成品だけ -1 です。',
+    adjust: '在庫調整：＋/−と数字の直接入力は完成品だけを変更します。未プリントBody・シートは変動しません。',
     inhouse_stock: '自社制作：＋で完成品 +1、同じBody・Color・Sizeの未プリントBody -1、必要なメイン／サブシート -1。',
     outsourced_stock: '外注入庫：＋で完成品だけ +1。未プリントBody・シートは変動しません。',
     inhouse_order: 'オーダー品：＋で未プリントBody -1、必要なメイン／サブシート -1。直接納品扱いなので完成品在庫は増やしません。'
@@ -6773,6 +6809,8 @@ function setActiveView(view){
 // UI-only combinations are separate from canonical inventory. Never remove an SKU when hiding it.
 const inventoryReviewChecked = new Set();
 let reviewIncludeZero = false;
+// Direct quantity edits are serialized because inventory_v2 is saved as one top-level map.
+let inventoryDirectSaveQueue = Promise.resolve();
 let taskDesignFilter = '';
 function comboKey(bodyId, colorId){ return `${bodyId}|${colorId}`; }
 function designComboSettings(designId){
@@ -6920,7 +6958,8 @@ function renderInventoryOverview(){
     groups.get(designId).rows.push(row);
   });
   const numberCell=n=>`<td class="${n===0?'review-zero':''}">${n}</td>`;
-  box.innerHTML=`<div class="inventory-review"><strong>完成品の在庫一覧</strong><p class="section-note">Designを縦に、Sizeを横に並べました。Design行が各Sizeの合計、その下がBody・Color別です。確認チェックは在庫数を変更しません。</p>
+  const editableCell=(row,size,index)=>`<td><input class="review-stock-input ${row.sizes[index]===0?'is-zero':''}" type="number" min="0" step="1" inputmode="numeric" value="${row.sizes[index]}" data-review-stock="${escapeHtml(row.pair)}" data-review-size="${escapeHtml(size.id)}" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color} ${size.managementName||size.id} 在庫`)}"></td>`;
+  box.innerHTML=`<div class="inventory-review"><strong>完成品の在庫一覧</strong><p class="section-note">Designを縦に、Sizeを横に並べました。Design行が各Sizeの合計、その下がBody・Color別です。数字は直接入力できます。確認チェックは在庫数を変更しません。</p>
     <input class="review-search" id="review-search" type="search" placeholder="Design・Body・Colorで検索" aria-label="在庫一覧を検索">
     <div class="review-actions"><label><input id="review-include-zero" type="checkbox" ${reviewIncludeZero?'checked':''}> 定番の在庫0も表示</label><button type="button" id="review-reset">確認チェックをリセット</button></div>
     <p class="section-note">サイズが収まらない場合は表を左右にスクロールできます。左端のDesign / Body・Colorは固定です。</p>
@@ -6929,7 +6968,7 @@ function renderInventoryOverview(){
       const sumBySize=sizes.map((_,i)=>group.rows.reduce((sum,row)=>sum+row.sizes[i],0));
       const sum=sumBySize.reduce((a,b)=>a+b,0);
       const count=group.rows.filter(row=>inventoryReviewChecked.has(row.pair)).length;
-      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span></th>${sumBySize.map(numberCell).join('')}<td>${sum}</td></tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small></span></label></th>${row.sizes.map(numberCell).join('')}<td>${row.total}</td></tr>`).join('')}</tbody>`;
+      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span></th>${sumBySize.map(numberCell).join('')}<td>${sum}</td></tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small></span></label></th>${sizes.map((size,index)=>editableCell(row,size,index)).join('')}<td>${row.total}</td></tr>`).join('')}</tbody>`;
     }).join('')}</table></div><p class="review-no-match" id="review-no-match" hidden>該当する組み合わせはありません。</p></div>`;
   const updateReviewDisplay=()=>{
     const q=box.querySelector('#review-search')?.value.toLowerCase().trim()||'';
@@ -6943,7 +6982,11 @@ function renderInventoryOverview(){
       });
       tbody.hidden=!visible.length;
       if(!visible.length)return;
-      const totals=sizes.map((_,i)=>visible.reduce((sum,tr)=>sum+Number(tr.children[i+1].textContent||0),0));
+      const totals=sizes.map((_,i)=>visible.reduce((sum,tr)=>{
+        const cell=tr.children[i+1];
+        const field=cell?.querySelector('[data-review-stock]');
+        return sum+Number(field?.value ?? cell?.textContent ?? 0);
+      },0));
       const grandTotal=totals.reduce((a,b)=>a+b,0);
       const confirmed=visible.filter(tr=>tr.querySelector('[data-review-check]')?.checked).length;
       const header=tbody.querySelector('.review-design-row');
@@ -6971,6 +7014,42 @@ function renderInventoryOverview(){
     input.closest('tr')?.classList.toggle('is-checked',input.checked);
     updateReviewDisplay();
   }));
+  box.querySelectorAll('[data-review-stock]').forEach(input=>{
+    input.addEventListener('focus',()=>input.select());
+    input.addEventListener('keydown',event=>{
+      if(event.key==='Enter'){event.preventDefault();input.blur();}
+    });
+    input.addEventListener('input',()=>{
+      input.classList.toggle('is-zero',Number(input.value||0)===0);
+      updateReviewDisplay();
+    });
+    input.addEventListener('change',async()=>{
+      const pair=String(input.getAttribute('data-review-stock')||'');
+      const [bodyId,designId,colorId]=pair.split('|');
+      const sizeId=input.getAttribute('data-review-size')||'';
+      const before=masterInventoryQty(bodyId,designId,colorId,sizeId);
+      const qty=Number(input.value);
+      if(!bodyId||!designId||!colorId||!sizeId||!Number.isInteger(qty)||qty<0){
+        input.value=String(before);
+        input.classList.toggle('is-zero',before===0);
+        updateReviewDisplay();
+        alert('在庫数は0以上の整数で入力してください。');
+        return;
+      }
+      if(qty===before)return;
+      input.disabled=true;
+      inventoryDirectSaveQueue=inventoryDirectSaveQueue.then(()=>setFinishedInventoryAbsolute(bodyId,designId,colorId,sizeId,qty));
+      const saved=await inventoryDirectSaveQueue;
+      if(saved===false){
+        input.disabled=false;
+        input.value=String(before);
+        updateReviewDisplay();
+        return;
+      }
+      renderStockSummary();
+      renderInventoryOverview();
+    });
+  });
   updateReviewDisplay();
 }
 function renderFinishedDisplayMode(){
@@ -7437,7 +7516,9 @@ function render(){
           }
           return `<div class="size-cell">
             <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="-1" ${inventoryAuthorityActive() && !selectedBodyId?'disabled title="Bodyを選択してください"':''}>−</button>
-            <span class="qty-val">${qty}</span>
+            ${inventoryAuthorityActive() && selectedBodyId
+              ? `<input class="qty-direct-input" type="number" min="0" step="1" inputmode="numeric" value="${qty}" data-direct-color="${escapeHtml(color)}" data-direct-size="${escapeHtml(size)}" aria-label="${escapeHtml(`${design} ${color} ${size} 在庫`)}">`
+              : `<span class="qty-val">${qty}</span>`}
             <button class="qty-btn" data-color="${escapeHtml(color)}" data-size="${escapeHtml(size)}" data-delta="1" ${inventoryAuthorityActive() && !selectedBodyId?'disabled title="Bodyを選択してください"':''}>＋</button>
           </div>`;
         }).join('')}
@@ -7509,6 +7590,40 @@ function render(){
       renderTabs();
       render();
       save();
+    });
+  });
+
+  app.querySelectorAll('[data-direct-color]').forEach(input=>{
+    input.addEventListener('focus',()=>input.select());
+    input.addEventListener('keydown',event=>{
+      if(event.key==='Enter'){event.preventDefault();input.blur();}
+    });
+    input.addEventListener('change',async()=>{
+      if(!inventoryAuthorityActive() || !state.finishedBodyId)return;
+      const color=input.getAttribute('data-direct-color')||'';
+      const size=input.getAttribute('data-direct-size')||'';
+      const dm=masterDesignByName(design);
+      const cm=masterColorByName(color);
+      const sm=masterSizeByName(size);
+      if(!dm||!cm||!sm)return;
+      const before=masterInventoryQty(state.finishedBodyId,dm.id,cm.id,sm.id);
+      const qty=Number(input.value);
+      if(!Number.isInteger(qty)||qty<0){
+        input.value=String(before);
+        alert('在庫数は0以上の整数で入力してください。');
+        return;
+      }
+      if(qty===before)return;
+      input.disabled=true;
+      inventoryDirectSaveQueue=inventoryDirectSaveQueue.then(()=>setFinishedInventoryAbsolute(state.finishedBodyId,dm.id,cm.id,sm.id,qty));
+      const saved=await inventoryDirectSaveQueue;
+      if(saved===false){
+        input.disabled=false;
+        input.value=String(before);
+        return;
+      }
+      renderTabs();
+      render();
     });
   });
 }
@@ -7665,7 +7780,9 @@ async function init(){
   }
 
   if(!state.sortMode) state.sortMode = 'priority';
-  if(!['design','list'].includes(state.finishedDisplayMode))state.finishedDisplayMode='design';
+  // 完成品在庫は、アプリを開いた直後は常に「在庫一覧・チェック」を表示する。
+  // Design別へ切り替えた場合は、そのセッション中は選択を維持する。
+  state.finishedDisplayMode = 'list';
   if(!state.activeView) state.activeView = 'finished';
   if(!state.activePlanDesign) state.activePlanDesign = state.activeDesign || Object.keys(state.designs)[0];
   if(!state.blankBodyId) state.blankBodyId = LEGACY_BODY_ID;
