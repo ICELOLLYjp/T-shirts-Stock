@@ -3427,7 +3427,7 @@ function renderFinishedAddMode(){
     outsourced_stock: '外注入庫：＋で完成品だけ +1。未プリントBody・シートは変動しません。',
     inhouse_order: 'オーダー品：＋で未プリントBody -1、必要なメイン／サブシート -1。直接納品扱いなので完成品在庫は増やしません。'
   };
-  note.textContent = notes[state.finishedAddMode];
+  note.textContent = notes[state.finishedAddMode] + ' 数字の直接入力は、どのモードでも棚卸し・在庫調整として完成品だけを変更します。';
 }
 
 async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
@@ -7038,7 +7038,9 @@ function renderInventoryOverview(){
       }
       if(qty===before)return;
       input.disabled=true;
-      inventoryDirectSaveQueue=inventoryDirectSaveQueue.then(()=>setFinishedInventoryAbsolute(bodyId,designId,colorId,sizeId,qty));
+      inventoryDirectSaveQueue=inventoryDirectSaveQueue
+        .then(()=>setFinishedInventoryAbsolute(bodyId,designId,colorId,sizeId,qty))
+        .catch(error=>{console.error('direct inventory save failed',error);return false;});
       const saved=await inventoryDirectSaveQueue;
       if(saved===false){
         input.disabled=false;
@@ -7615,7 +7617,9 @@ function render(){
       }
       if(qty===before)return;
       input.disabled=true;
-      inventoryDirectSaveQueue=inventoryDirectSaveQueue.then(()=>setFinishedInventoryAbsolute(state.finishedBodyId,dm.id,cm.id,sm.id,qty));
+      inventoryDirectSaveQueue=inventoryDirectSaveQueue
+        .then(()=>setFinishedInventoryAbsolute(state.finishedBodyId,dm.id,cm.id,sm.id,qty))
+        .catch(error=>{console.error('direct inventory save failed',error);return false;});
       const saved=await inventoryDirectSaveQueue;
       if(saved===false){
         input.disabled=false;
