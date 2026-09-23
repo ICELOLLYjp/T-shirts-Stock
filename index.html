@@ -8,21 +8,21 @@
 <meta name="apple-mobile-web-app-title" content="T在庫">
 <title>Tシャツ在庫管理</title>
 <style>
-  /* Neutral gray canvas with quiet blush accents and high-contrast rose actions. */
+  /* Neutral gray inventory UI with a single blue highlight color. */
   :root {
     color-scheme: light;
     --bg: #f3f4f6;
     --card: #ffffff;
-    --border: #e8d6df;
-    --text: #31242d;
-    --text-secondary: #64515c;
-    --text-muted: #796976;
-    --accent: #783a54;
-    --accent-bg: #f8e3eb;
-    --accent-solid: #783a54;
+    --border: #d9dce2;
+    --text: #202124;
+    --text-secondary: #5f6368;
+    --text-muted: #8b9097;
+    --accent: #185fa5;
+    --accent-bg: #e7f0f9;
+    --accent-solid: #185fa5;
     --accent-on-solid: #ffffff;
-    --pink-main: #edc4d2;
-    --pink-soft: #fceaf0;
+    --pink-main: #bdd6ee;
+    --pink-soft: #edf4fb;
     --page-glow: #e8eaee;
     --nav-bg: #f3f4f6;
     --success: #286f59;
@@ -31,27 +31,27 @@
     --info-bg: #eeedfa;
     --danger: #a32d43;
     --danger-bg: #fce9ed;
-    --shadow: 0 8px 28px rgba(88, 44, 65, .055);
+    --shadow: 0 8px 28px rgba(31, 35, 41, .055);
     --line: var(--border);
     --radius: 12px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --bg: #202127;
-      --card: #322731;
-      --border: #5e4855;
-      --text: #fff2f7;
-      --text-secondary: #e2cdd7;
-      --text-muted: #ceb9c4;
-      --accent: #ffd3e3;
-      --accent-bg: #513342;
-      --accent-solid: #edbed1;
-      --accent-on-solid: #31212b;
-      --pink-main: #70475a;
-      --pink-soft: #422d3a;
-      --page-glow: #30323b;
-      --nav-bg: #202127;
+      --bg: #202124;
+      --card: #292a2d;
+      --border: #44464c;
+      --text: #f1f3f4;
+      --text-secondary: #bdc1c6;
+      --text-muted: #969aa1;
+      --accent: #8ab4f8;
+      --accent-bg: #263a55;
+      --accent-solid: #8ab4f8;
+      --accent-on-solid: #17212b;
+      --pink-main: #3c5878;
+      --pink-soft: #27384a;
+      --page-glow: #292c31;
+      --nav-bg: #202124;
       --success: #a6e4cb;
       --success-bg: #28443b;
       --info: #d4d0ff;
@@ -1763,7 +1763,7 @@
   .task-design-heading { margin:16px 0 7px; padding:10px 12px; border-radius:9px; background:var(--accent-bg); color:var(--accent); font-size:16px; font-weight:700; }
   @media (min-width:700px) { .main-nav { grid-template-columns:repeat(6,minmax(0,1fr)); } .design-picker-options { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 
-  /* ICELOLLY blush theme: Stripe-inspired restraint, not Stripe branding. */
+  /* ICELOLLY stock-first neutral theme. */
   html { background: var(--bg); }
   body {
     background: radial-gradient(ellipse 110% 270px at 14% 0%, var(--page-glow) 0%, transparent 76%), var(--bg);
@@ -1809,7 +1809,7 @@
     border: 1px solid var(--accent-solid);
     background: var(--accent-solid);
     color: var(--accent-on-solid);
-    box-shadow: 0 3px 10px rgba(110, 52, 77, .13);
+    box-shadow: 0 3px 10px rgba(24, 95, 165, .14);
   }
   .inventory-mode-switch button.is-current,
   .design-picker-options button.selected,
@@ -1853,6 +1853,102 @@
   @media (prefers-reduced-motion: reduce) {
     .main-nav button { transition: none; }
   }
+
+  /* Stock-first information architecture */
+  .category-nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: 25;
+    margin: 0;
+    padding: 7px 0 8px;
+    background: var(--nav-bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .category-nav button {
+    min-width: 0;
+    min-height: 50px;
+    padding: 7px 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    color: var(--text-secondary);
+    font: inherit;
+  }
+  .category-nav button span,
+  .category-nav button small {
+    display: block;
+  }
+  .category-nav button span {
+    font-size: 13px;
+    font-weight: 750;
+    line-height: 1.2;
+  }
+  .category-nav button small {
+    margin-top: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    line-height: 1.1;
+    color: var(--text-muted);
+  }
+  .category-nav button.active {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .category-nav button.active small { color: var(--accent); }
+  .category-context {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-height: 38px;
+    padding: 10px 2px 6px;
+    color: var(--text-secondary);
+  }
+  .category-context strong {
+    color: var(--text);
+    font-size: 15px;
+  }
+  .category-context span {
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .main-nav {
+    position: static;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    padding: 0 0 10px;
+    margin: 0 0 10px;
+    background: transparent;
+    border-bottom: 0;
+  }
+  .main-nav[hidden],
+  .management-tools[hidden] { display: none !important; }
+  .main-nav button {
+    min-height: 40px;
+    height: 40px;
+    background: var(--card);
+  }
+  .main-nav button.active {
+    border-color: var(--accent-solid);
+    background: var(--accent-solid);
+    color: var(--accent-on-solid);
+  }
+  .management-tools {
+    margin: 0 0 12px;
+  }
+  .management-tools .master-tools {
+    justify-content: flex-start;
+  }
+  @media (min-width:700px) {
+    .category-nav { max-width: 620px; }
+    .category-nav button { min-height: 54px; }
+    .category-nav button span { font-size: 14px; }
+    .category-nav button small { font-size: 10px; }
+    .main-nav { max-width: 520px; }
+  }
 </style>
 </head>
 <body>
@@ -1881,37 +1977,45 @@
   <button id="backup-json-btn" class="backup-btn" type="button">JSONバックアップ</button>
 </div>
 <div id="schema-status"></div>
-<nav class="main-nav" id="main-nav">
+<nav class="category-nav" id="category-nav" aria-label="機能カテゴリ">
+  <button type="button" data-category="stock" data-default-view="finished" class="active"><span>在庫</span><small>完成品・資材</small></button>
+  <button type="button" data-category="production" data-default-view="plan"><span>制作</span><small>タスク</small></button>
+  <button type="button" data-category="orders" data-default-view="orders"><span>受発注</span><small>オーダー</small></button>
+  <button type="button" data-category="manage" data-default-view="costs"><span>管理</span><small>原価・設定</small></button>
+</nav>
+<div id="category-context" class="category-context">
+  <strong>在庫</strong><span>完成品と材料の残数を確認・更新</span>
+</div>
+<nav class="main-nav" id="main-nav" aria-label="在庫メニュー">
   <button type="button" data-view="finished" class="active">完成品</button>
   <button type="button" data-view="blank">未プリント</button>
   <button type="button" data-view="sheets">シート</button>
-  <button type="button" data-view="plan">制作タスク</button>
-  <button type="button" data-view="orders">Orders</button>
-  <button type="button" data-view="costs">原価</button>
 </nav>
 
-<div class="master-tools" style="gap:8px;">
-  <button id="body-settings-toggle" class="secondary-btn" type="button">Body設定</button>
-  <button id="color-settings-toggle" class="secondary-btn" type="button">Color設定</button>
-</div>
-<div id="body-settings-panel" class="body-settings-panel" hidden>
-  <div class="section-title">Bodyマスター</div>
-  <div class="section-note">管理用名称は在庫管理用です。販売用名称はPinkoiなどの表示名として使えます。</div>
-  <div id="body-master-list"></div>
-  <div class="body-add-grid">
-    <input id="new-body-management" type="text" placeholder="管理名" />
-    <input id="new-body-sales" type="text" placeholder="販売用名称" />
-    <button id="add-body-btn" class="icon-btn" type="button">＋</button>
+<div id="management-tools" class="management-tools" hidden>
+  <div class="master-tools" style="gap:8px;">
+    <button id="body-settings-toggle" class="secondary-btn" type="button">Body設定</button>
+    <button id="color-settings-toggle" class="secondary-btn" type="button">Color設定</button>
   </div>
-</div>
+  <div id="body-settings-panel" class="body-settings-panel" hidden>
+    <div class="section-title">Bodyマスター</div>
+    <div class="section-note">管理用名称は在庫管理用です。販売用名称はPinkoiなどの表示名として使えます。</div>
+    <div id="body-master-list"></div>
+    <div class="body-add-grid">
+      <input id="new-body-management" type="text" placeholder="管理名" />
+      <input id="new-body-sales" type="text" placeholder="販売用名称" />
+      <button id="add-body-btn" class="icon-btn" type="button">＋</button>
+    </div>
+  </div>
 
-<div id="color-settings-panel" class="color-settings-panel" hidden>
-  <div class="section-title">Colorマスター</div>
-  <div class="section-note">Colorごとに標準Bodyを設定できます。これは入力時の初期値として使いますが、BodyとColorの組み合わせ自体は自由です。</div>
-  <div id="color-mapping-warning"></div>
-  <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>標準Body</span></div>
-  <div id="color-master-list"></div>
-  <div class="color-mapping-note">標準Bodyは入力補助です。必要に応じて、どのBodyにも任意のColorを組み合わせて在庫・制作タスクを登録できます。</div>
+  <div id="color-settings-panel" class="color-settings-panel" hidden>
+    <div class="section-title">Colorマスター</div>
+    <div class="section-note">Colorごとに標準Bodyを設定できます。これは入力時の初期値として使いますが、BodyとColorの組み合わせ自体は自由です。</div>
+    <div id="color-mapping-warning"></div>
+    <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>標準Body</span></div>
+    <div id="color-master-list"></div>
+    <div class="color-mapping-note">標準Bodyは入力補助です。必要に応じて、どのBodyにも任意のColorを組み合わせて在庫・制作タスクを登録できます。</div>
+  </div>
 </div>
 
 <section id="view-finished" class="view-panel">
@@ -6627,6 +6731,31 @@ async function renderCostMaster(forceLoad=false){
   renderCostSkuSection();
 }
 
+const CATEGORY_META = {
+  stock: { label:'在庫', note:'完成品と材料の残数を確認・更新' },
+  production: { label:'制作', note:'制作タスクと加工の流れを管理' },
+  orders: { label:'受発注', note:'お客様のオーダーを管理' },
+  manage: { label:'管理', note:'原価とBody・Color設定を管理' }
+};
+function categoryForView(view){
+  if(['finished','blank','sheets'].includes(view)) return 'stock';
+  if(view === 'plan') return 'production';
+  if(view === 'orders') return 'orders';
+  return 'manage';
+}
+function syncCategoryNavigation(){
+  const category = categoryForView(state.activeView);
+  document.querySelectorAll('#category-nav button[data-category]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-category') === category);
+  });
+  const inventoryNav = document.getElementById('main-nav');
+  if(inventoryNav) inventoryNav.hidden = category !== 'stock';
+  const managementTools = document.getElementById('management-tools');
+  if(managementTools) managementTools.hidden = category !== 'manage';
+  const context = document.getElementById('category-context');
+  const meta = CATEGORY_META[category];
+  if(context && meta) context.innerHTML = `<strong>${meta.label}</strong><span>${meta.note}</span>`;
+}
 function setActiveView(view){
   const allowed = ['finished','blank','sheets','plan','orders','costs'];
   state.activeView = allowed.includes(view) ? view : 'finished';
@@ -6635,6 +6764,7 @@ function setActiveView(view){
     const panel = document.getElementById(`view-${name}`);
     if(panel) panel.hidden = name !== state.activeView;
   });
+  syncCategoryNavigation();
   saveLocal();
   renderCurrentView();
 }
@@ -7437,6 +7567,9 @@ document.getElementById('backup-json-btn').addEventListener('click', exportJsonB
 
 document.querySelectorAll('#main-nav button[data-view]').forEach(btn => {
   btn.addEventListener('click', () => setActiveView(btn.getAttribute('data-view')));
+});
+document.querySelectorAll('#category-nav button[data-default-view]').forEach(btn => {
+  btn.addEventListener('click', () => setActiveView(btn.getAttribute('data-default-view')));
 });
 
 document.getElementById('body-settings-toggle').addEventListener('click', () => {
