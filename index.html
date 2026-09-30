@@ -2069,9 +2069,13 @@
     line-height: 1.35;
   }
   .inventory-update-meta {
-    display: block;
+    display: -webkit-box;
     margin-top: 3px;
+    overflow: hidden;
     white-space: normal;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .inventory-card-update {
     margin-left: auto;
@@ -2079,29 +2083,41 @@
   }
   .card-footer { flex-wrap: wrap; gap: 4px 8px; }
   @media (max-width: 430px) {
-    .inventory-review { padding: 10px 8px; }
+    .inventory-review { padding: 10px 6px; }
+    .review-table {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
     .review-table th:first-child {
-      width: 132px;
-      min-width: 132px;
-      max-width: 132px;
+      width: 34%;
+      min-width: 0;
+      max-width: none;
     }
     .review-table thead th:not(:first-child):not(:last-child),
     .review-table td:not(:first-child):not(:last-child) {
-      width: 56px;
-      min-width: 56px;
-      max-width: 56px;
+      width: 11.2%;
+      min-width: 0;
+      max-width: none;
     }
     .review-table th:last-child,
     .review-table td:last-child {
-      width: 46px;
-      min-width: 46px;
-      max-width: 46px;
+      width: 10%;
+      min-width: 0;
+      max-width: none;
     }
-    .review-table { min-width: 458px; }
-    .review-table th,.review-table td { padding-left: 3px; padding-right: 3px; }
-    .review-stock-input { width: 44px; min-width: 44px; }
-    .review-variant-label { align-items: flex-start; gap: 5px; }
-    .inventory-update-meta { font-size: 9px; line-height: 1.25; }
+    .review-table th,.review-table td {
+      padding-left: 2px;
+      padding-right: 2px;
+    }
+    .review-stock-input {
+      width: calc(100% - 4px);
+      min-width: 0;
+      max-width: 44px;
+    }
+    .review-variant-label { align-items: flex-start; gap: 4px; }
+    .review-variant-label > span { min-width: 0; }
+    .inventory-update-meta { font-size: 9px; line-height: 1.2; }
   }
 </style>
 </head>
