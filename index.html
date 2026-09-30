@@ -1976,6 +1976,24 @@
     .category-nav button small { font-size: 10px; }
     .main-nav { max-width: 520px; }
   }
+
+  .inventory-update-meta,
+  .inventory-card-update {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .inventory-update-meta {
+    display: block;
+    margin-top: 3px;
+    white-space: normal;
+  }
+  .inventory-card-update {
+    margin-left: auto;
+    text-align: right;
+  }
+  .card-footer { flex-wrap: wrap; gap: 4px 8px; }
 </style>
 </head>
 <body>
@@ -3168,6 +3186,74 @@ function masterInventoryQty(bodyId, designId, colorId, sizeId){
   return Math.max(0, Number(masterDocument?.inventory_v2?.[bodyId]?.[designId]?.[colorId]?.[sizeId]?.qty || 0));
 }
 
+function inventoryUpdateSourceLabel(source){
+  const labels = {
+    direct_input: '直接入力',
+    sales_manager: 'Sales Manager同期',
+    inventory_adjustment: '在庫調整',
+    production: '制作反映',
+    outsourced_stock: '外注入庫',
+    body_assignment: 'Body振分'
+  };
+  return labels[String(source || '')] || '更新元未記録';
+}
+
+function inventoryUpdateTimeMs(value){
+  if(!value) return 0;
+  if(typeof value?.toMillis === 'function') return value.toMillis();
+  if(typeof value?.toDate === 'function') return value.toDate().getTime();
+  if(value instanceof Date) return value.getTime();
+  if(value?.seconds != null) return Number(value.seconds) * 1000 + Number(value.nanoseconds || 0) / 1e6;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function inventoryColorMetaForBody(bodyId, designId, colorId){
+  const explicit = masterDocument?.inventory_color_meta?.[bodyId]?.[designId]?.[colorId] || null;
+  let best = explicit ? { updatedAt: explicit.updatedAt || null, source: explicit.source || '' } : null;
+  let bestMs = inventoryUpdateTimeMs(best?.updatedAt);
+  const sizeTree = masterDocument?.inventory_v2?.[bodyId]?.[designId]?.[colorId] || {};
+  Object.values(sizeTree).forEach(cell => {
+    const ms = inventoryUpdateTimeMs(cell?.updatedAt);
+    if(ms >= bestMs && (cell?.updatedAt || cell?.updateSource)){
+      bestMs = ms;
+      best = { updatedAt: cell?.updatedAt || best?.updatedAt || null, source: cell?.updateSource || best?.source || '' };
+    }
+  });
+  return best;
+}
+
+function latestInventoryColorMeta(designId, colorId, bodyId = ''){
+  const bodyIds = bodyId
+    ? [bodyId]
+    : Array.from(new Set([
+        ...Object.keys(masterDocument?.inventory_v2 || {}),
+        ...Object.keys(masterDocument?.inventory_color_meta || {})
+      ])).filter(id => id !== LEGACY_BODY_ID);
+  let best = null;
+  let bestMs = -1;
+  bodyIds.forEach(id => {
+    const meta = inventoryColorMetaForBody(id, designId, colorId);
+    const ms = inventoryUpdateTimeMs(meta?.updatedAt);
+    if(meta && ms >= bestMs){ best = meta; bestMs = ms; }
+  });
+  return best;
+}
+
+function inventoryColorMetaText(designId, colorId, bodyId = ''){
+  const meta = latestInventoryColorMeta(designId, colorId, bodyId);
+  if(!meta) return '更新 未記録 · 更新元未記録';
+  return `更新 ${formatTimestamp(meta.updatedAt)} · ${inventoryUpdateSourceLabel(meta.source)}`;
+}
+
+function setInventoryColorMetaTree(root, bodyId, designId, colorId, source, updatedAt = nowIso()){
+  const next = structuredClone(root || {});
+  if(!next[bodyId]) next[bodyId] = {};
+  if(!next[bodyId][designId]) next[bodyId][designId] = {};
+  next[bodyId][designId][colorId] = { updatedAt, source: String(source || '') };
+  return next;
+}
+
 function masterInventoryQtyAll(designId, colorId, sizeId){
   return Object.keys(masterDocument?.inventory_v2 || {})
     .filter(bodyId => bodyId !== LEGACY_BODY_ID)
@@ -3373,10 +3459,12 @@ async function maybeActivateMasterAuthority(){
   return true;
 }
 
-async function saveMasterInventoryAndSync(inventory){
+async function saveMasterInventoryAndSync(inventory, inventoryColorMeta = null){
   if(!inventoryAuthorityActive()) return false;
-  masterDocument = { ...masterDocument, inventory_v2: inventory };
-  const saved = await saveMasterData({ inventory_v2: inventory });
+  const fields = { inventory_v2: inventory };
+  if(inventoryColorMeta) fields.inventory_color_meta = inventoryColorMeta;
+  masterDocument = { ...masterDocument, ...fields };
+  const saved = await saveMasterData(fields);
   if(saved === false) return false;
   await syncSharedFromMaster();
   return true;
@@ -3387,8 +3475,9 @@ async function setFinishedInventoryAbsolute(bodyId, designId, colorId, sizeId, r
   const qty = Number(requestedQty);
   if(!Number.isInteger(qty) || qty < 0) return false;
   const inventory = structuredClone(masterDocument?.inventory_v2 || {});
-  const next = setFinishedInventoryQtyTree(inventory, bodyId, designId, colorId, sizeId, qty);
-  return await saveMasterInventoryAndSync(next);
+  const next = setFinishedInventoryQtyTree(inventory, bodyId, designId, colorId, sizeId, qty, 'direct_input');
+  const meta = setInventoryColorMetaTree(masterDocument?.inventory_color_meta || {}, bodyId, designId, colorId, 'direct_input');
+  return await saveMasterInventoryAndSync(next, meta);
 }
 
 function renderFinishedBodySelector(){
@@ -3440,8 +3529,10 @@ async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
   if(mode === 'adjust' || mode === 'outsourced_stock'){
     const inventory = structuredClone(masterDocument?.inventory_v2 || {});
     const current = masterInventoryQty(bodyId, dm.id, cm.id, sm.id);
-    const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1);
-    return await saveMasterInventoryAndSync(next);
+    const source = mode === 'outsourced_stock' ? 'outsourced_stock' : 'inventory_adjustment';
+    const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1, source);
+    const meta = setInventoryColorMetaTree(masterDocument?.inventory_color_meta || {}, bodyId, dm.id, cm.id, source);
+    return await saveMasterInventoryAndSync(next, meta);
   }
 
   const blankQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[cm.id]?.[sm.id]?.qty || 0));
@@ -3469,14 +3560,16 @@ async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
   if(Math.max(0, Number(sheetItem.qty || 0)) > 0 || Math.max(0, Number(sheetItem.subQty || 0)) > 0) sheets[dm.id] = sheetItem;
   else delete sheets[dm.id];
 
+  let inventoryColorMeta = structuredClone(masterDocument?.inventory_color_meta || {});
   if(mode === 'inhouse_stock'){
     const current = masterInventoryQty(bodyId, dm.id, cm.id, sm.id);
-    inventory = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1);
+    inventory = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, current + 1, 'production');
+    inventoryColorMeta = setInventoryColorMetaTree(inventoryColorMeta, bodyId, dm.id, cm.id, 'production');
   }
 
-  masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory };
+  masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta };
   const fields = mode === 'inhouse_stock'
-    ? { blank_stock: blank, print_sheets: sheets, inventory_v2: inventory }
+    ? { blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta }
     : { blank_stock: blank, print_sheets: sheets };
   const saved = await saveMasterData(fields);
   if(saved === false) return false;
@@ -4684,12 +4777,12 @@ async function deleteProductionTask(taskIdValue){
   return await saveProductionTasks(tasks);
 }
 
-function setFinishedInventoryQtyTree(root, bodyId, designId, colorId, sizeId, qty){
+function setFinishedInventoryQtyTree(root, bodyId, designId, colorId, sizeId, qty, updateSource = 'inventory_adjustment'){
   const next = structuredClone(root || {});
   if(!next[bodyId]) next[bodyId] = {};
   if(!next[bodyId][designId]) next[bodyId][designId] = {};
   if(!next[bodyId][designId][colorId]) next[bodyId][designId][colorId] = {};
-  if(qty > 0) next[bodyId][designId][colorId][sizeId] = { qty, updatedAt: nowIso() };
+  if(qty > 0) next[bodyId][designId][colorId][sizeId] = { qty, updatedAt: nowIso(), updateSource };
   else delete next[bodyId][designId][colorId][sizeId];
   return next;
 }
@@ -4745,14 +4838,16 @@ ${materialText}`)) return false;
     else delete sheets[task.designId];
   }
 
+  let inventoryColorMeta = structuredClone(masterDocument?.inventory_color_meta || {});
   if(!isOrder){
     const finishedBefore = masterInventoryQty(task.bodyId, task.designId, task.colorId, task.sizeId);
-    inventory = setFinishedInventoryQtyTree(inventory, task.bodyId, task.designId, task.colorId, task.sizeId, finishedBefore + task.qty);
+    inventory = setFinishedInventoryQtyTree(inventory, task.bodyId, task.designId, task.colorId, task.sizeId, finishedBefore + task.qty, 'production');
+    inventoryColorMeta = setInventoryColorMetaTree(inventoryColorMeta, task.bodyId, task.designId, task.colorId, 'production');
   }
   delete tasks[task.id];
 
-  masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, production_tasks: tasks, productionTasksVersion: 1 };
-  const saved = await saveMasterData({ blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, production_tasks: tasks, productionTasksVersion: 1 });
+  masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta, production_tasks: tasks, productionTasksVersion: 1 };
+  const saved = await saveMasterData({ blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta, production_tasks: tasks, productionTasksVersion: 1 });
   if(saved === false) return false;
   if(!isOrder) await syncSharedFromMaster();
   renderCurrentView();
@@ -6939,7 +7034,8 @@ function allInventoryReviewRows(){
     const sizeValues=sizes.map(size=>Math.max(0,Number(inventory?.[bodyId]?.[designId]?.[colorId]?.[size.id]?.qty||0)));
     const total=sizeValues.reduce((a,b)=>a+b,0);
     if(!reviewIncludeZero && total===0)return;
-    rows.push({pair, body:bodies[bodyId].managementName||bodyId, design:designs[designId].managementName||designId, color:colors[colorId].managementName||colorId, sizes:sizeValues,total});
+    const meta = latestInventoryColorMeta(designId, colorId, bodyId);
+    rows.push({pair, body:bodies[bodyId].managementName||bodyId, design:designs[designId].managementName||designId, color:colors[colorId].managementName||colorId, sizes:sizeValues,total, updatedAt:meta?.updatedAt||null, updateSource:meta?.source||''});
   });
   return rows.sort((a,b)=>a.design.localeCompare(b.design,'ja')||a.body.localeCompare(b.body,'ja')||a.color.localeCompare(b.color,'ja'));
 }
@@ -6968,7 +7064,7 @@ function renderInventoryOverview(){
       const sumBySize=sizes.map((_,i)=>group.rows.reduce((sum,row)=>sum+row.sizes[i],0));
       const sum=sumBySize.reduce((a,b)=>a+b,0);
       const count=group.rows.filter(row=>inventoryReviewChecked.has(row.pair)).length;
-      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span></th>${sumBySize.map(numberCell).join('')}<td>${sum}</td></tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small></span></label></th>${sizes.map((size,index)=>editableCell(row,size,index)).join('')}<td>${row.total}</td></tr>`).join('')}</tbody>`;
+      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span></th>${sumBySize.map(numberCell).join('')}<td>${sum}</td></tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small><small class="inventory-update-meta">${escapeHtml(row.updatedAt ? `更新 ${formatTimestamp(row.updatedAt)} · ${inventoryUpdateSourceLabel(row.updateSource)}` : '更新 未記録 · 更新元未記録')}</small></span></label></th>${sizes.map((size,index)=>editableCell(row,size,index)).join('')}<td>${row.total}</td></tr>`).join('')}</tbody>`;
     }).join('')}</table></div><p class="review-no-match" id="review-no-match" hidden>該当する組み合わせはありません。</p></div>`;
   const updateReviewDisplay=()=>{
     const q=box.querySelector('#review-search')?.value.toLowerCase().trim()||'';
@@ -7503,6 +7599,12 @@ function render(){
   }
 
   visibleColors.forEach(color => {
+    let colorUpdateText = '更新 未記録 · 更新元未記録';
+    if(inventoryAuthorityActive()){
+      const dm = masterDesignByName(design);
+      const cm = masterColorByName(color);
+      if(dm && cm) colorUpdateText = inventoryColorMetaText(dm.id, cm.id, selectedBodyId || '');
+    }
     html += `<div class="color-card">
       <div class="color-row">
         <div class="color-name">${escapeHtml(color)}</div>
@@ -7527,6 +7629,7 @@ function render(){
       </div>
       <div class="card-footer">
         <span class="subtotal">${inventoryAuthorityActive() ? (selectedBodyId ? `選択Body ${masterTotalForColorName(design,color,selectedBodyId)} 枚 / 全Body ${masterTotalForColorName(design,color)} 枚` : `全Body ${masterTotalForColorName(design,color)} 枚`) : `在庫 ${totalForColor(design,color)} 枚`}</span>
+        ${inventoryAuthorityActive() ? `<span class="inventory-card-update">${escapeHtml(colorUpdateText)}</span>` : ''}
       </div>
     </div>`;
   });
@@ -7579,8 +7682,9 @@ function render(){
           // − は制作方法に関係なく、完成品在庫の手動減算として扱う。
           const inventory = structuredClone(masterDocument.inventory_v2 || {});
           const current = Math.max(0, Number(inventory?.[bodyId]?.[dm.id]?.[cm.id]?.[sm.id]?.qty || 0));
-          const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, Math.max(0, current - 1));
-          await saveMasterInventoryAndSync(next);
+          const next = setFinishedInventoryQtyTree(inventory, bodyId, dm.id, cm.id, sm.id, Math.max(0, current - 1), 'inventory_adjustment');
+          const meta = setInventoryColorMetaTree(masterDocument?.inventory_color_meta || {}, bodyId, dm.id, cm.id, 'inventory_adjustment');
+          await saveMasterInventoryAndSync(next, meta);
         }
         renderTabs();
         render();
