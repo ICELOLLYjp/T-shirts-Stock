@@ -152,6 +152,13 @@ Inventory review batch-task registration:
 - all selected task additions are merged in memory and saved with one `production_tasks` write;
 - successful registration clears the review checks and rerenders the existing in-memory task overlay.
 
+Material context in the finished inventory list:
+
+- each Design subtotal shows current print-sheet stock;
+- each Body / Color row shows the total blank Body stock with an optional Size breakdown;
+- the batch production-task editor shows current print-sheet stock, blank Body total, and Size-level blank Body availability;
+- all values are calculated from the already-loaded `masterDocument.blank_stock`, `print_sheets`, and `sheet_settings`; no additional Firestore read or listener is used.
+
 Performance requirement:
 
 - Do not add Firestore reads for this overlay.

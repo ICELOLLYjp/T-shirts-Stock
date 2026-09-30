@@ -1737,6 +1737,15 @@
   .review-task-batch-size input { width:100%; min-width:0; height:34px; padding:0 2px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); text-align:center; font:inherit; font-size:13px; font-weight:700; }
   .review-task-batch-size small { display:block; min-height:14px; margin-top:2px; font-size:8px; line-height:1.15; color:var(--text-muted); white-space:nowrap; }
   .review-task-batch-save { width:100%; min-height:42px; margin-top:10px; border:1px solid var(--accent); border-radius:9px; background:var(--accent-solid); color:var(--accent-on-solid); font-weight:700; }
+  .review-sheet-meta { display:block; margin-top:3px; color:var(--text-secondary); font-size:10px; font-weight:600; line-height:1.3; }
+  .review-material-toggle { display:block; margin:4px 0 0 28px; padding:0; border:0; background:transparent; color:var(--accent); font:inherit; font-size:10px; font-weight:650; line-height:1.3; text-align:left; }
+  .review-material-toggle::after { content:' ›'; }
+  .review-material-toggle[aria-expanded="true"]::after { content:' ⌄'; }
+  .review-material-detail { margin:3px 0 0 28px; color:var(--text-muted); font-size:9px; font-weight:500; line-height:1.35; white-space:normal; }
+  .review-material-detail[hidden] { display:none; }
+  .review-task-batch-note { margin:-2px 0 6px; color:var(--text-secondary); font-size:9px; line-height:1.35; }
+  .review-task-batch-resource { margin-top:3px; color:var(--accent); font-size:10px; font-weight:650; line-height:1.3; }
+  .review-task-batch-size small { white-space:normal; }
   .review-table-wrap { max-width:100%; overflow-x:auto; overflow-y:visible; border:1px solid var(--border); border-radius:10px; -webkit-overflow-scrolling:touch; }
   .review-table { border-collapse:separate; border-spacing:0; width:100%; min-width:355px; font-size:13px; font-variant-numeric:tabular-nums; }
   .review-table th,.review-table td { border-bottom:1px solid var(--border); padding:10px 5px; text-align:center; white-space:nowrap; }
@@ -7270,6 +7279,19 @@ function renderInventoryOverview(){
   const taskOverlay=buildInventoryTaskOverlay();
   const rows=allInventoryReviewRows(taskOverlay);
   const sizes=masterSizes();
+  const materialIdsForPair=pair=>String(pair||'').split('|');
+  const blankQtyForPair=(pair,sizeId)=>{
+    const [bodyId,,colorId]=materialIdsForPair(pair);
+    return Math.max(0,Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty||0));
+  };
+  const blankTotalForPair=pair=>sizes.reduce((sum,size)=>sum+blankQtyForPair(pair,size.id),0);
+  const sheetResourceText=designId=>{
+    const main=sheetStockQty(designId,'main');
+    return sheetSubEnabled(designId)
+      ? `シート 主${main} / 副${sheetStockQty(designId,'sub')}`
+      : `シート ${main}枚`;
+  };
+  const materialMetaHtml=row=>`<button type="button" class="review-material-toggle" data-review-material-toggle="${escapeHtml(row.pair)}" aria-expanded="false">未プリント ${blankTotalForPair(row.pair)}枚</button><div class="review-material-detail" data-review-material-detail="${escapeHtml(row.pair)}" hidden>${sizes.map(size=>`${escapeHtml(size.managementName||size.id)} ${blankQtyForPair(row.pair,size.id)}`).join(' / ')}</div>`;
   // The vertical axis is Design; each Design gets a size-by-size subtotal followed
   // by its Body / Color variants. This is presentation only, not a stock mutation.
   const groups=new Map();
@@ -7299,7 +7321,7 @@ function renderInventoryOverview(){
       const taskStockSum=taskStockBySize.reduce((a,b)=>a+b,0);
       const taskOrderSum=taskOrderBySize.reduce((a,b)=>a+b,0);
       const count=group.rows.filter(row=>inventoryReviewChecked.has(row.pair)).length;
-      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span></th>${sumBySize.map((n,i)=>summaryCell(n,taskStockBySize[i],taskOrderBySize[i])).join('')}${summaryCell(sum,taskStockSum,taskOrderSum)}</tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small><small class="inventory-update-meta">${escapeHtml(row.updatedAt ? `更新 ${formatTimestamp(row.updatedAt)} · ${inventoryUpdateSourceLabel(row.updateSource)}` : '更新 未記録 · 更新元未記録')}</small></span></label></th>${sizes.map((size,index)=>editableCell(row,size,index)).join('')}${summaryCell(row.total,row.taskStockTotal,row.taskOrderTotal)}</tr>`).join('')}</tbody>`;
+      return `<tbody data-review-design="${escapeHtml(group.designId)}"><tr class="review-design-row"><th scope="row"><span class="review-design-name">${escapeHtml(group.name)}</span><span class="review-design-count" data-review-design-count>${group.rows.length}組・確認済 ${count}組</span><span class="review-sheet-meta">${escapeHtml(sheetResourceText(group.designId))}</span></th>${sumBySize.map((n,i)=>summaryCell(n,taskStockBySize[i],taskOrderBySize[i])).join('')}${summaryCell(sum,taskStockSum,taskOrderSum)}</tr>${group.rows.map(row=>`<tr data-review-row="${escapeHtml(row.pair)}" data-search="${escapeHtml(`${row.design} ${row.body} ${row.color}`.toLowerCase())}" class="${inventoryReviewChecked.has(row.pair)?'is-checked':''}"><th scope="row"><label class="review-variant-label"><input type="checkbox" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color}`)} 確認済" data-review-check="${escapeHtml(row.pair)}" ${inventoryReviewChecked.has(row.pair)?'checked':''}><span>${escapeHtml(row.body)}<small>${escapeHtml(row.color)}</small><small class="inventory-update-meta">${escapeHtml(row.updatedAt ? `更新 ${formatTimestamp(row.updatedAt)} · ${inventoryUpdateSourceLabel(row.updateSource)}` : '更新 未記録 · 更新元未記録')}</small></span></label>${materialMetaHtml(row)}</th>${sizes.map((size,index)=>editableCell(row,size,index)).join('')}${summaryCell(row.total,row.taskStockTotal,row.taskOrderTotal)}</tr>`).join('')}</tbody>`;
     }).join('')}</table></div><p class="review-no-match" id="review-no-match" hidden>該当する組み合わせはありません。</p></div>`;
   const updateReviewDisplay=()=>{
     const q=box.querySelector('#review-search')?.value.toLowerCase().trim()||'';
@@ -7364,7 +7386,8 @@ function renderInventoryOverview(){
     panel.hidden=false;
     panel.innerHTML=`<div class="review-task-batch-head"><strong>チェックした${selectedRows.length}組を制作タスクへ</strong><button type="button" class="review-task-batch-close" id="review-task-batch-close">閉じる</button></div>
       <div class="review-task-batch-settings"><label>制作方法<select id="review-task-batch-method"><option value="inhouse">自社制作</option><option value="outsourced">外注</option></select></label><label>用途<select id="review-task-batch-purpose"><option value="stock">在庫用</option><option value="order">オーダー品</option></select></label></div>
-      ${selectedRows.map(row=>`<div class="review-task-batch-row" data-review-batch-row="${escapeHtml(row.pair)}"><div class="review-task-batch-row-title">${escapeHtml(row.design)} / ${escapeHtml(row.body)} / ${escapeHtml(row.color)}</div><div class="review-task-batch-sizes">${sizes.map((size,index)=>`<div class="review-task-batch-size"><label>${escapeHtml(size.managementName||size.id)}</label><input type="number" min="0" step="1" inputmode="numeric" value="0" data-review-batch-size="${escapeHtml(size.id)}" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color} ${size.managementName||size.id} 制作数量`)}"><small>在${row.sizes[index]} / 制${row.taskStockSizes[index]+row.taskOrderSizes[index]}</small></div>`).join('')}</div></div>`).join('')}
+      <div class="review-task-batch-note">各サイズ　完＝完成品 / B＝未プリントBody / 制＝登録済制作</div>
+      ${selectedRows.map(row=>`<div class="review-task-batch-row" data-review-batch-row="${escapeHtml(row.pair)}"><div class="review-task-batch-row-title">${escapeHtml(row.design)} / ${escapeHtml(row.body)} / ${escapeHtml(row.color)}</div><div class="review-task-batch-resource">${escapeHtml(sheetResourceText(materialIdsForPair(row.pair)[1]))} / 未プリント ${blankTotalForPair(row.pair)}枚</div><div class="review-task-batch-sizes">${sizes.map((size,index)=>`<div class="review-task-batch-size"><label>${escapeHtml(size.managementName||size.id)}</label><input type="number" min="0" step="1" inputmode="numeric" value="0" data-review-batch-size="${escapeHtml(size.id)}" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color} ${size.managementName||size.id} 制作数量`)}"><small>完${row.sizes[index]} B${blankQtyForPair(row.pair,size.id)} 制${row.taskStockSizes[index]+row.taskOrderSizes[index]}</small></div>`).join('')}</div></div>`).join('')}
       <button type="button" class="review-task-batch-save" id="review-task-batch-save">まとめてタスク登録</button>`;
     panel.querySelector('#review-task-batch-close')?.addEventListener('click',()=>{panel.hidden=true;panel.innerHTML='';});
     panel.querySelectorAll('[data-review-batch-size]').forEach(input=>input.addEventListener('focus',()=>input.select()));
@@ -7394,6 +7417,13 @@ function renderInventoryOverview(){
       renderInventoryOverview();
     });
   });
+  box.querySelectorAll('[data-review-material-toggle]').forEach(button=>button.addEventListener('click',()=>{
+    const detail=button.nextElementSibling;
+    if(!detail?.matches('[data-review-material-detail]'))return;
+    const expanded=button.getAttribute('aria-expanded')==='true';
+    button.setAttribute('aria-expanded',String(!expanded));
+    detail.hidden=expanded;
+  }));
   box.querySelectorAll('[data-review-check]').forEach(input=>input.addEventListener('change',()=>{
     const key=input.getAttribute('data-review-check');
     if(input.checked)inventoryReviewChecked.add(key);else inventoryReviewChecked.delete(key);
