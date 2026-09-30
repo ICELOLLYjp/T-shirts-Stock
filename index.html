@@ -2020,7 +2020,7 @@
     gap: 2px;
     width: 100%;
     min-width: 0;
-    min-height: 12px;
+    min-height: 14px;
     margin-top: 2px;
   }
   .review-task-stock,
@@ -7227,7 +7227,6 @@ function renderInventoryOverview(){
   const taskBadgeHtml=(stockTask=0,orderTask=0)=>{
     const stock=Math.max(0,Number(stockTask||0));
     const order=Math.max(0,Number(orderTask||0));
-    if(!stock && !order)return '';
     return `<span class="review-task-overlay">${stock?`<span class="review-task-stock" title="在庫用制作タスク">＋${stock}</span>`:''}${order?`<span class="review-task-order" title="オーダー制作タスク">注${order}</span>`:''}</span>`;
   };
   const summaryCell=(stock,stockTask=0,orderTask=0)=>`<td class="${stock===0?'review-zero':''}"><span class="review-stock-total">${stock}</span>${taskBadgeHtml(stockTask,orderTask)}</td>`;
