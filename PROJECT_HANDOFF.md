@@ -144,6 +144,14 @@ Current display semantics:
 - Design-level Size subtotals also include the task overlay;
 - the overlay is display-only and does not mutate inventory.
 
+Inventory review batch-task registration:
+
+- checked Body / Design / Color rows in the finished inventory list can be sent to a batch production-task editor;
+- Size quantities are entered explicitly per checked row to avoid guessing production quantities;
+- production method and purpose are shared for the batch;
+- all selected task additions are merged in memory and saved with one `production_tasks` write;
+- successful registration clears the review checks and rerenders the existing in-memory task overlay.
+
 Performance requirement:
 
 - Do not add Firestore reads for this overlay.
