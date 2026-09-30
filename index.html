@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="T在庫">
@@ -62,6 +62,10 @@
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body,
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
+  }
   html, body {
     margin: 0; padding: 0;
     background: var(--bg);
@@ -1963,13 +1967,45 @@
   .review-stock-input:disabled,
   .qty-direct-input:disabled { opacity: .55; }
   .review-table td:has(.review-stock-input) { padding: 4px 3px; }
+  /* iPhone: keep the matrix dimensions stable even when task badges are shown. */
+  .review-table-wrap {
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x pan-y;
+  }
+  .review-table {
+    width: 100%;
+    min-width: 482px;
+    table-layout: fixed;
+  }
+  .review-table th:first-child {
+    width: 142px;
+    min-width: 142px;
+    max-width: 142px;
+  }
+  .review-table thead th:not(:first-child):not(:last-child),
+  .review-table td:not(:first-child):not(:last-child) {
+    width: 58px;
+    min-width: 58px;
+    max-width: 58px;
+  }
+  .review-table th:last-child,
+  .review-table td:last-child {
+    width: 50px;
+    min-width: 50px;
+    max-width: 50px;
+  }
+  .review-stock-input {
+    width: 46px;
+    min-width: 46px;
+  }
   .review-stock-cell {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-width: 48px;
+    width: 100%;
+    min-width: 0;
   }
   .review-stock-total {
     display: block;
@@ -1982,6 +2018,8 @@
     justify-content: center;
     flex-wrap: wrap;
     gap: 2px;
+    width: 100%;
+    min-width: 0;
     min-height: 12px;
     margin-top: 2px;
   }
@@ -2040,6 +2078,31 @@
     text-align: right;
   }
   .card-footer { flex-wrap: wrap; gap: 4px 8px; }
+  @media (max-width: 430px) {
+    .inventory-review { padding: 10px 8px; }
+    .review-table th:first-child {
+      width: 132px;
+      min-width: 132px;
+      max-width: 132px;
+    }
+    .review-table thead th:not(:first-child):not(:last-child),
+    .review-table td:not(:first-child):not(:last-child) {
+      width: 56px;
+      min-width: 56px;
+      max-width: 56px;
+    }
+    .review-table th:last-child,
+    .review-table td:last-child {
+      width: 46px;
+      min-width: 46px;
+      max-width: 46px;
+    }
+    .review-table { min-width: 458px; }
+    .review-table th,.review-table td { padding-left: 3px; padding-right: 3px; }
+    .review-stock-input { width: 44px; min-width: 44px; }
+    .review-variant-label { align-items: flex-start; gap: 5px; }
+    .inventory-update-meta { font-size: 9px; line-height: 1.25; }
+  }
 </style>
 </head>
 <body>
@@ -3241,7 +3304,7 @@ function inventoryUpdateSourceLabel(source){
     outsourced_stock: '外注入庫',
     body_assignment: 'Body振分'
   };
-  return labels[String(source || '')] || '更新元未記録';
+  return labels[String(source || '')] || '未記録';
 }
 
 function inventoryUpdateTimeMs(value){
