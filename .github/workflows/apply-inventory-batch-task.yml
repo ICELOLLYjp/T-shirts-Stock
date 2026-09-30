@@ -1,0 +1,107 @@
+name: Apply inventory batch task registration
+
+on:
+  push:
+    branches:
+      - feature/inventory-batch-task-20261001
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/inventory-batch-task-20261001
+          fetch-depth: 0
+
+      - name: Patch inventory batch task registration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          css_anchor = "  .review-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; }\n"
+          css_insert = css_anchor + '''  .review-task-batch-btn { border-color:var(--accent) !important; background:var(--accent-bg) !important; color:var(--accent) !important; font-weight:700; }\n  .review-task-batch-panel { margin:10px 0 12px; padding:10px; border:1px solid var(--accent); border-radius:10px; background:var(--accent-bg); }\n  .review-task-batch-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }\n  .review-task-batch-head strong { font-size:14px; }\n  .review-task-batch-close { min-height:34px; padding:4px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--text); }\n  .review-task-batch-settings { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }\n  .review-task-batch-settings label { min-width:0; font-size:11px; color:var(--text-secondary); }\n  .review-task-batch-settings select { width:100%; margin-top:3px; }\n  .review-task-batch-row { margin-top:8px; padding:9px; border:1px solid var(--border); border-radius:9px; background:var(--card); }\n  .review-task-batch-row-title { font-size:12px; font-weight:700; line-height:1.35; overflow-wrap:anywhere; }\n  .review-task-batch-sizes { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; margin-top:7px; }\n  .review-task-batch-size { min-width:0; text-align:center; }\n  .review-task-batch-size label { display:block; margin-bottom:3px; font-size:10px; font-weight:700; color:var(--text-secondary); }\n  .review-task-batch-size input { width:100%; min-width:0; height:34px; padding:0 2px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); text-align:center; font:inherit; font-size:13px; font-weight:700; }\n  .review-task-batch-size small { display:block; min-height:14px; margin-top:2px; font-size:8px; line-height:1.15; color:var(--text-muted); white-space:nowrap; }\n  .review-task-batch-save { width:100%; min-height:42px; margin-top:10px; border:1px solid var(--accent); border-radius:9px; background:var(--accent-solid); color:var(--accent-on-solid); font-weight:700; }\n'''
+          if css_anchor not in text:
+              raise SystemExit('review actions CSS anchor missing')
+          text = text.replace(css_anchor, css_insert, 1)
+
+          helper_marker = 'async function addProductionTasksBatch('
+          helper_start = text.find(helper_marker)
+          if helper_start < 0:
+              raise SystemExit('addProductionTasksBatch missing')
+          next_async = text.find('\nasync function ', helper_start + len(helper_marker))
+          if next_async < 0:
+              raise SystemExit('next async function after addProductionTasksBatch missing')
+          helper = '''\n\nasync function addProductionTaskSelectionsBatch(entries, method, purpose = 'stock'){\n  const normalizedMethod = method === 'outsourced' ? 'outsourced' : 'inhouse';\n  const normalizedPurpose = purpose === 'order' ? 'order' : 'stock';\n  const tasks = structuredClone(productionTasks());\n  const keyFor = (designId,bodyId,colorId,sizeId,taskMethod,taskPurpose) => JSON.stringify([designId,bodyId,colorId,sizeId,taskMethod,taskPurpose]);\n  const index = new Map();\n  Object.values(tasks).forEach(task => {\n    const bodyId = task.bodyId || masterDocument?.masters?.colors?.[task.colorId]?.bodyId || '';\n    const taskMethod = task.method === 'outsourced' ? 'outsourced' : 'inhouse';\n    const taskPurpose = task.purpose === 'order' ? 'order' : 'stock';\n    index.set(keyFor(task.designId,bodyId,task.colorId,task.sizeId,taskMethod,taskPurpose), task.id);\n  });\n  let added = 0;\n  (entries || []).forEach(entry => {\n    const designId = String(entry?.designId || '');\n    const bodyId = String(entry?.bodyId || '');\n    const colorId = String(entry?.colorId || '');\n    if(!designId || !bodyId || !colorId) return;\n    Object.entries(entry?.sizeQtyMap || {}).forEach(([sizeId,rawQty]) => {\n      const qty = Math.max(0, parseInt(rawQty,10) || 0);\n      if(!sizeId || qty <= 0) return;\n      const key = keyFor(designId,bodyId,colorId,sizeId,normalizedMethod,normalizedPurpose);\n      const existingId = index.get(key);\n      if(existingId && tasks[existingId]){\n        tasks[existingId] = { ...tasks[existingId], bodyId, qty: Math.max(0, Number(tasks[existingId].qty || 0)) + qty, updatedAt: nowIso() };\n      } else {\n        const id = taskId();\n        tasks[id] = { id, designId, bodyId, colorId, sizeId, qty, method: normalizedMethod, purpose: normalizedPurpose, createdAt: nowIso(), updatedAt: nowIso() };\n        index.set(key,id);\n      }\n      added += qty;\n    });\n  });\n  if(added <= 0) return false;\n  return await saveProductionTasks(tasks);\n}\n'''
+          text = text[:next_async] + helper + text[next_async:]
+
+          actions_old = '''    <div class="review-actions"><label><input id="review-include-zero" type="checkbox" ${reviewIncludeZero?'checked':''}> 定番の在庫0も表示</label><button type="button" id="review-reset">確認チェックをリセット</button></div>\n    <p class="section-note">サイズが収まらない場合は表を左右にスクロールできます。左端のDesign / Body・Colorは固定です。制作タスクは表示だけで、在庫数は変更しません。</p>'''
+          actions_new = '''    <div class="review-actions"><label><input id="review-include-zero" type="checkbox" ${reviewIncludeZero?'checked':''}> 定番の在庫0も表示</label><button type="button" id="review-add-tasks" class="review-task-batch-btn" disabled>チェックした組を制作タスクへ</button><button type="button" id="review-reset">確認チェックをリセット</button></div>\n    <div id="review-task-batch-panel" class="review-task-batch-panel" hidden></div>\n    <p class="section-note">サイズが収まらない場合は表を左右にスクロールできます。左端のDesign / Body・Colorは固定です。制作タスクは表示だけで、在庫数は変更しません。</p>'''
+          if actions_old not in text:
+              raise SystemExit('review actions markup anchor missing')
+          text = text.replace(actions_old, actions_new, 1)
+
+          display_old = '''    box.querySelector('#review-checked-count').textContent=String(checkedCount);\n    box.querySelector('#review-no-match').hidden=visibleCount>0;'''
+          display_new = '''    box.querySelector('#review-checked-count').textContent=String(checkedCount);\n    const batchButton=box.querySelector('#review-add-tasks');\n    const selectedCount=rows.filter(row=>inventoryReviewChecked.has(row.pair)).length;\n    if(batchButton){\n      batchButton.disabled=selectedCount===0;\n      batchButton.textContent=selectedCount?`チェックした${selectedCount}組を制作タスクへ`:'チェックした組を制作タスクへ';\n    }\n    box.querySelector('#review-no-match').hidden=visibleCount>0;'''
+          if display_old not in text:
+              raise SystemExit('review display anchor missing')
+          text = text.replace(display_old, display_new, 1)
+
+          event_old = '''  box.querySelector('#review-reset')?.addEventListener('click',()=>{inventoryReviewChecked.clear();renderInventoryOverview();});\n  box.querySelectorAll('[data-review-check]').forEach(input=>input.addEventListener('change',()=>{'''
+          event_new = '''  box.querySelector('#review-reset')?.addEventListener('click',()=>{inventoryReviewChecked.clear();renderInventoryOverview();});\n  box.querySelector('#review-add-tasks')?.addEventListener('click',()=>{\n    const selectedRows=rows.filter(row=>inventoryReviewChecked.has(row.pair));\n    if(!selectedRows.length)return;\n    const panel=box.querySelector('#review-task-batch-panel');\n    if(!panel)return;\n    panel.hidden=false;\n    panel.innerHTML=`<div class="review-task-batch-head"><strong>チェックした${selectedRows.length}組を制作タスクへ</strong><button type="button" class="review-task-batch-close" id="review-task-batch-close">閉じる</button></div>\n      <div class="review-task-batch-settings"><label>制作方法<select id="review-task-batch-method"><option value="inhouse">自社制作</option><option value="outsourced">外注</option></select></label><label>用途<select id="review-task-batch-purpose"><option value="stock">在庫用</option><option value="order">オーダー品</option></select></label></div>\n      ${selectedRows.map(row=>`<div class="review-task-batch-row" data-review-batch-row="${escapeHtml(row.pair)}"><div class="review-task-batch-row-title">${escapeHtml(row.design)} / ${escapeHtml(row.body)} / ${escapeHtml(row.color)}</div><div class="review-task-batch-sizes">${sizes.map((size,index)=>`<div class="review-task-batch-size"><label>${escapeHtml(size.managementName||size.id)}</label><input type="number" min="0" step="1" inputmode="numeric" value="0" data-review-batch-size="${escapeHtml(size.id)}" aria-label="${escapeHtml(`${row.design} ${row.body} ${row.color} ${size.managementName||size.id} 制作数量`)}"><small>在${row.sizes[index]} / 制${row.taskStockSizes[index]+row.taskOrderSizes[index]}</small></div>`).join('')}</div></div>`).join('')}\n      <button type="button" class="review-task-batch-save" id="review-task-batch-save">まとめてタスク登録</button>`;\n    panel.querySelector('#review-task-batch-close')?.addEventListener('click',()=>{panel.hidden=true;panel.innerHTML='';});\n    panel.querySelectorAll('[data-review-batch-size]').forEach(input=>input.addEventListener('focus',()=>input.select()));\n    panel.querySelector('#review-task-batch-save')?.addEventListener('click',async event=>{\n      const entries=[];\n      let total=0;\n      panel.querySelectorAll('[data-review-batch-row]').forEach(rowBox=>{\n        const pair=String(rowBox.getAttribute('data-review-batch-row')||'');\n        const [bodyId,designId,colorId]=pair.split('|');\n        const sizeQtyMap={};\n        rowBox.querySelectorAll('[data-review-batch-size]').forEach(input=>{\n          const sizeId=String(input.getAttribute('data-review-batch-size')||'');\n          const qty=Math.max(0,parseInt(input.value,10)||0);\n          if(sizeId && qty>0){sizeQtyMap[sizeId]=qty;total+=qty;}\n        });\n        if(Object.keys(sizeQtyMap).length)entries.push({designId,bodyId,colorId,sizeQtyMap});\n      });\n      if(!entries.length){alert('制作するサイズの数量を入力してください。');return;}\n      const button=event.currentTarget;\n      button.disabled=true;\n      button.textContent=`登録中… ${total}枚`;\n      const method=panel.querySelector('#review-task-batch-method')?.value||'inhouse';\n      const purpose=panel.querySelector('#review-task-batch-purpose')?.value==='order'?'order':'stock';\n      const saved=await addProductionTaskSelectionsBatch(entries,method,purpose);\n      if(saved===false){button.disabled=false;button.textContent='まとめてタスク登録';return;}\n      inventoryReviewChecked.clear();\n      renderInventoryOverview();\n    });\n  });\n  box.querySelectorAll('[data-review-check]').forEach(input=>input.addEventListener('change',()=>{'''
+          if event_old not in text:
+              raise SystemExit('review event anchor missing')
+          text = text.replace(event_old, event_new, 1)
+
+          checkbox_old = '''    if(input.checked)inventoryReviewChecked.add(key);else inventoryReviewChecked.delete(key);\n    input.closest('tr')?.classList.toggle('is-checked',input.checked);\n    updateReviewDisplay();'''
+          checkbox_new = '''    if(input.checked)inventoryReviewChecked.add(key);else inventoryReviewChecked.delete(key);\n    input.closest('tr')?.classList.toggle('is-checked',input.checked);\n    const batchPanel=box.querySelector('#review-task-batch-panel');\n    if(batchPanel && !batchPanel.hidden){batchPanel.hidden=true;batchPanel.innerHTML='';}\n    updateReviewDisplay();'''
+          if checkbox_old not in text:
+              raise SystemExit('review checkbox handler anchor missing')
+          text = text.replace(checkbox_old, checkbox_new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+          handoff = Path('PROJECT_HANDOFF.md')
+          h = handoff.read_text(encoding='utf-8')
+          h_anchor = '''Performance requirement:\n\n- Do not add Firestore reads for this overlay.'''
+          h_new = '''Inventory review batch-task registration:\n\n- checked Body / Design / Color rows in the finished inventory list can be sent to a batch production-task editor;\n- Size quantities are entered explicitly per checked row to avoid guessing production quantities;\n- production method and purpose are shared for the batch;\n- all selected task additions are merged in memory and saved with one `production_tasks` write;\n- successful registration clears the review checks and rerenders the existing in-memory task overlay.\n\nPerformance requirement:\n\n- Do not add Firestore reads for this overlay.'''
+          if h_anchor not in h:
+              raise SystemExit('handoff production overlay anchor missing')
+          handoff.write_text(h.replace(h_anchor,h_new,1), encoding='utf-8')
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -Fq 'async function addProductionTaskSelectionsBatch' index.html
+          grep -Fq 'id="review-add-tasks"' index.html
+          grep -Fq 'id="review-task-batch-save"' index.html
+          grep -Fq 'all selected task additions are merged in memory' PROJECT_HANDOFF.md
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert s.count('async function addProductionTaskSelectionsBatch') == 1
+          assert s.count('id="review-add-tasks"') == 1
+          assert s.count('id="review-task-batch-panel"') == 1
+          assert 'saveProductionTasks(tasks)' in s
+          assert "inventoryReviewChecked.clear();\n      renderInventoryOverview();" in s
+          print('batch task registration patch checks passed')
+          PY
+
+      - name: Commit result and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/apply-inventory-batch-task.yml
+          git add index.html PROJECT_HANDOFF.md
+          git commit -m 'Add batch task registration from inventory review'
+          git push origin HEAD:feature/inventory-batch-task-20261001
