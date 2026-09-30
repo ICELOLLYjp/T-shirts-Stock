@@ -21,94 +21,19 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-
+          import re
           path = Path('index.html')
           text = path.read_text(encoding='utf-8')
-
-          old_meta = '''  .inventory-update-meta {
-    display: block;
-    margin-top: 3px;
-    white-space: normal;
-  }'''
-          new_meta = '''  .inventory-update-meta {
-    display: -webkit-box;
-    margin-top: 3px;
-    overflow: hidden;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }'''
+          old_meta = "  .inventory-update-meta {\n    display: block;\n    margin-top: 3px;\n    white-space: normal;\n  }"
+          new_meta = "  .inventory-update-meta {\n    display: -webkit-box;\n    margin-top: 3px;\n    overflow: hidden;\n    white-space: normal;\n    overflow-wrap: anywhere;\n    -webkit-box-orient: vertical;\n    -webkit-line-clamp: 2;\n  }"
           if old_meta not in text:
               raise SystemExit('inventory metadata CSS anchor missing')
           text = text.replace(old_meta, new_meta, 1)
-
-          old_mobile = '''  @media (max-width: 430px) {
-    .inventory-review { padding: 10px 8px; }
-    .review-table th:first-child {
-      width: 132px;
-      min-width: 132px;
-      max-width: 132px;
-    }
-    .review-table thead th:not(:first-child):not(:last-child),
-    .review-table td:not(:first-child):not(:last-child) {
-      width: 56px;
-      min-width: 56px;
-      max-width: 56px;
-    }
-    .review-table th:last-child,
-    .review-table td:last-child {
-      width: 46px;
-      min-width: 46px;
-      max-width: 46px;
-    }
-    .review-table { min-width: 458px; }
-    .review-table th,.review-table td { padding-left: 3px; padding-right: 3px; }
-    .review-stock-input { width: 44px; min-width: 44px; }
-    .review-variant-label { align-items: flex-start; gap: 5px; }
-    .inventory-update-meta { font-size: 9px; line-height: 1.25; }
-  }'''
-          new_mobile = '''  @media (max-width: 430px) {
-    .inventory-review { padding: 10px 6px; }
-    .review-table {
-      width: 100%;
-      min-width: 0;
-      table-layout: fixed;
-    }
-    .review-table th:first-child {
-      width: 34%;
-      min-width: 0;
-      max-width: none;
-    }
-    .review-table thead th:not(:first-child):not(:last-child),
-    .review-table td:not(:first-child):not(:last-child) {
-      width: 11.2%;
-      min-width: 0;
-      max-width: none;
-    }
-    .review-table th:last-child,
-    .review-table td:last-child {
-      width: 10%;
-      min-width: 0;
-      max-width: none;
-    }
-    .review-table th,.review-table td {
-      padding-left: 2px;
-      padding-right: 2px;
-    }
-    .review-stock-input {
-      width: calc(100% - 4px);
-      min-width: 0;
-      max-width: 44px;
-    }
-    .review-variant-label { align-items: flex-start; gap: 4px; }
-    .review-variant-label > span { min-width: 0; }
-    .inventory-update-meta { font-size: 9px; line-height: 1.2; }
-  }'''
-          if old_mobile not in text:
-              raise SystemExit('mobile inventory CSS block missing')
-          text = text.replace(old_mobile, new_mobile, 1)
-
+          pattern = r"  @media \(max-width: 430px\) \{\n    \.inventory-review \{ padding: 10px 8px; \}\n.*?\n  \}"
+          new_mobile = "  @media (max-width: 430px) {\n    .inventory-review { padding: 10px 6px; }\n    .review-table {\n      width: 100%;\n      min-width: 0;\n      table-layout: fixed;\n    }\n    .review-table th:first-child {\n      width: 34%;\n      min-width: 0;\n      max-width: none;\n    }\n    .review-table thead th:not(:first-child):not(:last-child),\n    .review-table td:not(:first-child):not(:last-child) {\n      width: 11.2%;\n      min-width: 0;\n      max-width: none;\n    }\n    .review-table th:last-child,\n    .review-table td:last-child {\n      width: 10%;\n      min-width: 0;\n      max-width: none;\n    }\n    .review-table th,.review-table td {\n      padding-left: 2px;\n      padding-right: 2px;\n    }\n    .review-stock-input {\n      width: calc(100% - 4px);\n      min-width: 0;\n      max-width: 44px;\n    }\n    .review-variant-label { align-items: flex-start; gap: 4px; }\n    .review-variant-label > span { min-width: 0; }\n    .inventory-update-meta { font-size: 9px; line-height: 1.2; }\n  }"
+          text, count = re.subn(pattern, lambda match: new_mobile, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'mobile inventory CSS block replacement count: {count}')
           path.write_text(text, encoding='utf-8')
 
       - name: Validate patch
