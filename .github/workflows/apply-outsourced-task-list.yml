@@ -1,0 +1,118 @@
+name: Apply outsourced task list
+
+on:
+  push:
+    branches:
+      - feature/separate-outsourced-task-list
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/separate-outsourced-task-list
+          fetch-depth: 0
+      - name: Separate inhouse and outsourced task lists
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          css_anchor = "  .task-list { display: grid; gap: 8px; }\n"
+          css_insert = """  .task-list { display: grid; gap: 8px; }
+  .task-method-lists { display:grid; gap:14px; }
+  .task-method-section { padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--bg); }
+  .task-method-section-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:0 0 8px; }
+  .task-method-section-head strong { font-size:14px; color:var(--text); }
+  .task-method-section-head span { font-size:11px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  .task-method-section .task-empty { margin:0; padding:10px; }
+"""
+          if '.task-method-lists {' not in text:
+              if css_anchor not in text:
+                  raise SystemExit('CSS anchor not found')
+              text = text.replace(css_anchor, css_insert, 1)
+
+          start_old = """  const rows = res.rows;
+  let previousTaskDesign = '';
+  listBox.innerHTML = rows.length ? `<div class=\"task-list\">${rows.map(task => {
+"""
+          start_new = """  const rows = res.rows;
+  const inhouseRows = rows.filter(task => task.method === 'inhouse');
+  const outsourcedRows = rows.filter(task => task.method === 'outsourced');
+  const renderTaskRows = (taskRows, emptyText) => {
+    let previousTaskDesign = '';
+    return taskRows.length ? `<div class=\"task-list\">${taskRows.map(task => {
+"""
+          if start_old not in text:
+              raise SystemExit('Task list start anchor not found')
+          text = text.replace(start_old, start_new, 1)
+
+          end_old = """  }).join('')}</div>` : '<div class=\"task-empty\">制作タスクはありません。上の「タスクを追加」から登録してください。</div>';
+
+  listBox.querySelectorAll('button[data-task-delta]').forEach(btn => btn.addEventListener('click', async () => {
+"""
+          end_new = """  }).join('')}</div>` : `<div class=\"task-empty\">${escapeHtml(emptyText)}</div>`;
+  };
+  const inhouseQty = inhouseRows.reduce((sum, task) => sum + Math.max(0, Number(task.qty || 0)), 0);
+  const outsourcedQty = outsourcedRows.reduce((sum, task) => sum + Math.max(0, Number(task.qty || 0)), 0);
+  listBox.innerHTML = `<div class=\"task-method-lists\">
+    <section class=\"task-method-section\"><div class=\"task-method-section-head\"><strong>自社制作</strong><span>${inhouseRows.length}件 / ${inhouseQty}枚</span></div>${renderTaskRows(inhouseRows,'自社制作タスクはありません。')}</section>
+    <section class=\"task-method-section\"><div class=\"task-method-section-head\"><strong>外注</strong><span>${outsourcedRows.length}件 / ${outsourcedQty}枚</span></div>${renderTaskRows(outsourcedRows,'外注タスクはありません。')}</section>
+  </div>`;
+
+  listBox.querySelectorAll('button[data-task-delta]').forEach(btn => btn.addEventListener('click', async () => {
+"""
+          if end_old not in text:
+              raise SystemExit('Task list end anchor not found')
+          text = text.replace(end_old, end_new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          handoff = Path('PROJECT_HANDOFF.md')
+          h = handoff.read_text(encoding='utf-8')
+          h = h.replace('Last updated: 2026-09-30', 'Last updated: 2026-10-01', 1)
+          marker = """When completing an in-house stock-production task:
+"""
+          addition = """Task screen presentation:
+
+- the task screen separates current tasks into an in-house list and an outsourced list;
+- each list shows its task count and total quantity;
+- changing a task method moves it to the corresponding list on rerender;
+- this is presentation only and does not change `production_tasks` storage or completion semantics.
+
+When completing an in-house stock-production task:
+"""
+          if 'the task screen separates current tasks into an in-house list and an outsourced list' not in h:
+              if marker not in h:
+                  raise SystemExit('Handoff anchor not found')
+              h = h.replace(marker, addition, 1)
+          handoff.write_text(h, encoding='utf-8')
+          PY
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('index.html').read_text(encoding='utf-8')
+          match = re.search(r'<script type="module">(.*?)</script>', text, re.S)
+          if not match:
+              raise SystemExit('module script not found')
+          Path('/tmp/tshirts-stock-app.mjs').write_text(match.group(1), encoding='utf-8')
+          PY
+          node --check /tmp/tshirts-stock-app.mjs
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html PROJECT_HANDOFF.md
+          git commit -m "Separate outsourced production task list"
+          rm .github/workflows/apply-outsourced-task-list.yml
+          git add -u .github/workflows/apply-outsourced-task-list.yml
+          git commit -m "Remove temporary task list workflow"
+          git push origin HEAD:feature/separate-outsourced-task-list
