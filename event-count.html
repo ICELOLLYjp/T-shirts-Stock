@@ -19,11 +19,59 @@
 <div id="countPanel" class="hidden">
 <div class="card summary"><div class="stat"><strong id="knownStat">0</strong><span>確認済SKU</span></div><div class="stat"><strong id="unknownStat">0</strong><span>不明SKU</span></div><div class="stat"><strong id="qtyStat">0</strong><span>確認済点数</span></div><div class="stat"><strong id="openingStat">0</strong><span>開始点数</span></div></div>
 <div class="card checkpoint"><strong>途中カウント / 日次締め</strong><div class="note">確認したSKUだけ保存できます。何も数えていない日でも日次記録を残せます。不明は不明のままです。</div><div class="checkpoint-tools"><button id="saveCheckpointButton" class="btn" type="button">途中カウント保存</button><button id="saveDailyButton" class="btn" type="button">日次締め保存</button></div></div>
-<div class="card"><div class="row"><div class="grow"><strong>実数を入力</strong><div class="note">数字を入れると「確認済」。数量0は「0」ボタン。不明は「不明」ボタン。</div></div><button id="reloadButton" class="btn" type="button">再読込</button></div>
+<div class="card"><div class="row"><div class="grow"><strong>実数を入力</strong><div class="note">数字を入れると「確認済」。数量0は「0」ボタン。不明は「不明」ボタン。キーボードではTab、Enter、矢印で数量欄を移動できます。</div></div><button id="reloadButton" class="btn" type="button">再読込</button></div>
 <div class="tools"><button id="copyOpeningButton" class="btn" type="button">開始数をコピー</button><button id="zeroAllButton" class="btn" type="button">全部0</button><button id="unknownAllButton" class="btn" type="button">全部不明</button></div>
 <div class="warning">「0」は実際に0点と確認した状態です。「不明」は未確認です。終了時も不明のまま残せます。</div>
 <div class="filterbar"><input id="searchInput" class="search" type="search" placeholder="Design / Body / Colorを検索"><div id="sortNote" class="sort-note"></div></div>
 <div class="matrix-wrap"><div id="matrix" class="matrix"></div></div><div id="draftInfo" class="status"></div>
 <div class="checkpoint-tools"><button id="saveDraftButton" class="btn" type="button">途中保存</button><button id="confirmButton" class="btn accent" type="button">棚卸を確定</button></div><div id="message" class="status"></div></div>
 </div></section>
-</main><script type="module" src="./event-count-v2.js?v=20260916-unknown-zero-1"></script></body></html>
+</main><script type="module" src="./event-count-v2.js?v=20260916-unknown-zero-1"></script><script>
+(function () {
+  const selectors = ".qty";
+  const rows = "tr, .color-row, .mrow, .item";
+  function visible(node) {
+    return !node.disabled && node.getClientRects().length > 0;
+  }
+  document.addEventListener("focusin", event => {
+    const input = event.target;
+    if (input.matches?.(selectors) && typeof input.select === "function") input.select();
+  });
+  document.addEventListener("keydown", event => {
+    const input = event.target;
+    if (!input.matches?.(selectors) || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    const key = event.key;
+    if (!["Tab", "Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) return;
+    const selector = selectors.split(",").find(part => input.matches(part.trim()))?.trim();
+    const scope = input.closest(".if-card, .inventory-review, #matrix, #list, #view, #app") || document;
+    const all = [...scope.querySelectorAll(selector)].filter(visible);
+    const index = all.indexOf(input);
+    if (index < 0) return;
+    const direction = key === "ArrowLeft" || key === "ArrowUp" || (key === "Tab" && event.shiftKey) ? -1 : 1;
+    let next = null;
+    if (key.startsWith("Arrow")) {
+      const row = input.closest(rows);
+      const peers = row ? [...row.querySelectorAll(selector)].filter(visible) : [];
+      const column = peers.indexOf(input);
+      if (column >= 0 && (key === "ArrowLeft" || key === "ArrowRight")) {
+        next = peers[column + direction] || null;
+      } else if (column >= 0) {
+        let neighbor = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+        while (neighbor && !next) {
+          const candidates = [...neighbor.querySelectorAll(selector)].filter(visible);
+          next = candidates[column] || null;
+          neighbor = direction < 0 ? neighbor.previousElementSibling : neighbor.nextElementSibling;
+        }
+      }
+    }
+    next ||= all[index + direction] || null;
+    if (!next) return;
+    event.preventDefault();
+    event.stopPropagation();
+    next.focus();
+    next.select();
+    next.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, true);
+})();
+</script>
+</body></html>

@@ -7287,10 +7287,29 @@ function allInventoryReviewRows(taskOverlay = null){
   });
   return rows.sort((a,b)=>a.design.localeCompare(b.design,'ja')||a.body.localeCompare(b.body,'ja')||a.color.localeCompare(b.color,'ja'));
 }
+function rememberQuantityFocus(root,selector){
+  const focused=document.activeElement;
+  if(!focused?.matches?.(selector)||!root?.contains(focused))return()=>{};
+  const key=selector==='.review-stock-input'
+    ? [focused.dataset.reviewStock,focused.dataset.reviewSize]
+    : [focused.dataset.directColor,focused.dataset.directSize];
+  return()=>{
+    // An unrelated control chosen while the save was pending takes priority.
+    if(document.activeElement!==document.body)return;
+    const replacement=[...root.querySelectorAll(selector)].find(input=>{
+      const candidate=selector==='.review-stock-input'
+        ? [input.dataset.reviewStock,input.dataset.reviewSize]
+        : [input.dataset.directColor,input.dataset.directSize];
+      return candidate[0]===key[0]&&candidate[1]===key[1];
+    });
+    if(replacement && !replacement.disabled){replacement.focus({preventScroll:true});replacement.select();}
+  };
+}
 function renderInventoryOverview(){
   const box=document.getElementById('inventory-overview');
   if(!box)return;
   if(!inventoryAuthorityActive()){box.innerHTML='<div class="inventory-review">実在庫マスターへの接続後に使用できます。</div>';return;}
+  const restoreFocus=rememberQuantityFocus(box,'.review-stock-input');
   // Firestoreの追加読込は行わず、すでに読み込まれている production_tasks を1回だけ集計する。
   const taskOverlay=buildInventoryTaskOverlay();
   const rows=allInventoryReviewRows(taskOverlay);
@@ -7487,6 +7506,7 @@ function renderInventoryOverview(){
     });
   });
   updateReviewDisplay();
+  restoreFocus();
 }
 function renderFinishedDisplayMode(){
   const listMode=state.finishedDisplayMode==='list';
@@ -8068,8 +8088,10 @@ function render(){
         input.value=String(before);
         return;
       }
+      const restoreFocus=rememberQuantityFocus(app,'.qty-direct-input');
       renderTabs();
       render();
+      restoreFocus();
     });
   });
 }
@@ -8442,6 +8464,54 @@ async function startAuthGate(){
 }
 
 startAuthGate();
+</script>
+<script>
+(function () {
+  const selectors = ".qty-direct-input, .review-stock-input, .planned-input";
+  const rows = "tr, .color-row, .mrow, .item";
+  function visible(node) {
+    return !node.disabled && node.getClientRects().length > 0;
+  }
+  document.addEventListener("focusin", event => {
+    const input = event.target;
+    if (input.matches?.(selectors) && typeof input.select === "function") input.select();
+  });
+  document.addEventListener("keydown", event => {
+    const input = event.target;
+    if (!input.matches?.(selectors) || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    const key = event.key;
+    if (!["Tab", "Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) return;
+    const selector = selectors.split(",").find(part => input.matches(part.trim()))?.trim();
+    const scope = input.closest(".if-card, .inventory-review, #matrix, #list, #view, #app") || document;
+    const all = [...scope.querySelectorAll(selector)].filter(visible);
+    const index = all.indexOf(input);
+    if (index < 0) return;
+    const direction = key === "ArrowLeft" || key === "ArrowUp" || (key === "Tab" && event.shiftKey) ? -1 : 1;
+    let next = null;
+    if (key.startsWith("Arrow")) {
+      const row = input.closest(rows);
+      const peers = row ? [...row.querySelectorAll(selector)].filter(visible) : [];
+      const column = peers.indexOf(input);
+      if (column >= 0 && (key === "ArrowLeft" || key === "ArrowRight")) {
+        next = peers[column + direction] || null;
+      } else if (column >= 0) {
+        let neighbor = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+        while (neighbor && !next) {
+          const candidates = [...neighbor.querySelectorAll(selector)].filter(visible);
+          next = candidates[column] || null;
+          neighbor = direction < 0 ? neighbor.previousElementSibling : neighbor.nextElementSibling;
+        }
+      }
+    }
+    next ||= all[index + direction] || null;
+    if (!next) return;
+    event.preventDefault();
+    event.stopPropagation();
+    next.focus();
+    next.select();
+    next.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, true);
+})();
 </script>
 </body>
 </html>
