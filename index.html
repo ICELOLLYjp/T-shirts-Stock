@@ -959,6 +959,12 @@
     white-space: nowrap;
   }
   .task-list { display: grid; gap: 8px; }
+  .task-method-lists { display:grid; gap:14px; }
+  .task-method-section { padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--bg); }
+  .task-method-section-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:0 0 8px; }
+  .task-method-section-head strong { font-size:14px; color:var(--text); }
+  .task-method-section-head span { font-size:11px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  .task-method-section .task-empty { margin:0; padding:10px; }
   .task-card { margin-bottom: 0; }
   .task-card-head {
     display: flex;
@@ -5195,8 +5201,11 @@ function renderProductionTasks(){
   });
 
   const rows = res.rows;
-  let previousTaskDesign = '';
-  listBox.innerHTML = rows.length ? `<div class="task-list">${rows.map(task => {
+  const inhouseRows = rows.filter(task => task.method === 'inhouse');
+  const outsourcedRows = rows.filter(task => task.method === 'outsourced');
+  const renderTaskRows = (taskRows, emptyText) => {
+    let previousTaskDesign = '';
+    return taskRows.length ? `<div class="task-list">${taskRows.map(task => {
     const bodyStock = blankQtyForTask(task);
     const mainSheetStock = sheetQtyForTask(task);
     const needsSub = sheetSubEnabled(task.designId);
@@ -5218,7 +5227,14 @@ function renderProductionTasks(){
       <div class="task-resource-note ${canComplete?'':'warn'}">${escapeHtml(resourceText)}</div>
       <div class="task-action-row"><button class="task-complete-btn" type="button" data-task-complete="${escapeHtml(task.id)}" ${canComplete?'':'disabled'}>タスク完了</button><button class="task-delete-btn" type="button" data-task-delete="${escapeHtml(task.id)}">タスク削除</button></div>
     </div>`;
-  }).join('')}</div>` : '<div class="task-empty">制作タスクはありません。上の「タスクを追加」から登録してください。</div>';
+  }).join('')}</div>` : `<div class="task-empty">${escapeHtml(emptyText)}</div>`;
+  };
+  const inhouseQty = inhouseRows.reduce((sum, task) => sum + Math.max(0, Number(task.qty || 0)), 0);
+  const outsourcedQty = outsourcedRows.reduce((sum, task) => sum + Math.max(0, Number(task.qty || 0)), 0);
+  listBox.innerHTML = `<div class="task-method-lists">
+    <section class="task-method-section"><div class="task-method-section-head"><strong>自社制作</strong><span>${inhouseRows.length}件 / ${inhouseQty}枚</span></div>${renderTaskRows(inhouseRows,'自社制作タスクはありません。')}</section>
+    <section class="task-method-section"><div class="task-method-section-head"><strong>外注</strong><span>${outsourcedRows.length}件 / ${outsourcedQty}枚</span></div>${renderTaskRows(outsourcedRows,'外注タスクはありません。')}</section>
+  </div>`;
 
   listBox.querySelectorAll('button[data-task-delta]').forEach(btn => btn.addEventListener('click', async () => {
     const id = btn.getAttribute('data-task-id');

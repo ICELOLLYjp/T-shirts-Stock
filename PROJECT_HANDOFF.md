@@ -1,6 +1,6 @@
 # ICELOLLY T-shirts Stock — Project Handoff
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 ## Start here — mandatory workflow for a new chat
 
@@ -182,6 +182,13 @@ Important dimensions:
 - `qty`
 - `method`: `inhouse` or `outsourced`
 - `purpose`: `stock` or `order`
+
+Task screen presentation:
+
+- the task screen separates current tasks into an in-house list and an outsourced list;
+- each list shows its task count and total quantity;
+- changing a task method moves it to the corresponding list on rerender;
+- this is presentation only and does not change `production_tasks` storage or completion semantics.
 
 When completing an in-house stock-production task:
 
