@@ -1,0 +1,38 @@
+name: Fix iOS touch icon
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/fix-ios-touch-icon.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Use PNG touch icon
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          text = p.read_text(encoding='utf-8')
+          old = '<link rel="apple-touch-icon" href="./app-icon.svg">'
+          new = '<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">'
+          if old not in text and new not in text:
+              raise SystemExit('Expected icon link not found')
+          p.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-ios-touch-icon.yml
+          git add index.html
+          git commit -m "Use PNG icon for iOS home screen"
+          git push origin HEAD:main
