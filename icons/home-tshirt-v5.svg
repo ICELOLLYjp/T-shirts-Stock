@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1BAD68"/><stop offset="1" stop-color="#007B4D"/></linearGradient>
+  <linearGradient id="letter" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D7F8E5"/><stop offset="1" stop-color="#B2EBCB"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<path d="M230.90154052243807 210.0H793.0984594775621V328.89484259879436H590.8546550569324V820.0H433.5539182853316V328.89484259879436H230.90154052243807Z" transform="translate(0 12)" fill="#005D3A" opacity=".22"/>
+<path d="M230.90154052243807 210.0H793.0984594775621V328.89484259879436H590.8546550569324V820.0H433.5539182853316V328.89484259879436H230.90154052243807Z" fill="url(#letter)"/>
+</svg>
