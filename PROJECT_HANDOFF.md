@@ -337,3 +337,70 @@ If the change affects Sales Manager sync, validate the corresponding Sales Manag
 Use the following message at the start of a new ChatGPT chat:
 
 > ICELOLLY T-shirts Stockの開発を引き継いでください。GitHubの `ICELOLLYjp/T-shirts-Stock` に接続し、最初に最新の `main` と、`index.html` と同じ階層にある `PROJECT_HANDOFF.md` を読んでください。過去チャットの記憶よりGitHubの最新 `main` を優先してください。Sales Manager連携に関係する作業なら `ICELOLLYjp/Sales-Manager` の最新 `main` と `PROJECT_HANDOFF.md` も確認してください。確認が終わったら、現在の実装状態と今回の作業に関係する注意点を短く整理してから作業を開始してください。処理速度を落とさない実装を優先し、既存の在庫データ構造・SKU・Orders・原価・制作タスクに意図しない変更を入れないでください。
+---
+
+## 13. System role boundary with Website, Accessories and Sales Manager
+
+Recorded: 2026-10-05
+
+This app must remain the primary T shirt inventory and production operations app.
+
+### 13.1 What T shirts Stock owns
+
+T shirts Stock is the operational authority for:
+
+* Finished T shirt inventory in `tshirtStock/master.inventory_v2`
+* Body, Design, Color and Size inventory dimensions
+* Blank Body stock
+* Print sheet stock
+* Production tasks and production completion effects
+* Current inventory review and direct physical stock corrections
+* T shirt production context needed for customer orders
+* Inventory related master data already maintained by this app
+
+The default UI must continue to make current inventory the primary mental model.
+
+### 13.2 What T shirts Stock does not own
+
+T shirts Stock is not:
+
+* The public ecommerce storefront
+* The public product portfolio
+* The event POS or event sales ledger
+* The customer facing translation, photography or merchandising system
+* The authority for WooCommerce order state
+
+Do not move those responsibilities into this app merely because T shirt data is available here.
+
+### 13.3 Relationship with Sales Manager
+
+Sales Manager is the event sales and event business operations app.
+
+It may:
+
+* Read T shirt catalog and stock information
+* Record event sales and Sessions
+* Apply defined exact SKU sale, void and approved reconciliation effects to canonical T shirt stock
+* Store sale time snapshots needed for sales history and profitability
+
+It must not maintain a second permanent T shirt stock authority.
+
+### 13.4 Relationship with the ICELOLLY website
+
+The website and WooCommerce are the customer facing ecommerce and portfolio layer.
+
+The website may consume mapped T shirt information such as Body, Design, Color, Size, SKU and available stock. It owns web product images, descriptions, translations, merchandising, checkout and online order presentation.
+
+WooCommerce must not become an independent canonical physical stock source. A future website integration should read stock from this app by default and apply paid online sale stock effects through a controlled, idempotent integration.
+
+Do not write directly from a public website request into the full `inventory_v2` map without a reviewed transaction boundary.
+
+### 13.5 Cross app rules
+
+1. `tshirtStock/master.inventory_v2` remains canonical finished T shirt stock.
+2. Preserve stable Body, Design, Color, Size and SKU identities.
+3. Prefer read only catalog and inventory APIs as the first integration step.
+4. Any external stock mutation must be explicit, idempotent and auditable.
+5. Do not duplicate customer facing product copy or images here unless they are operationally required.
+6. Online prices and event prices may differ. Do not make this app the implicit authority for every sales channel price.
+7. Before changing a shared contract, inspect the latest Website policy and Sales Manager handoff in addition to this file.
