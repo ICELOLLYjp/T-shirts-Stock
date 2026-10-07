@@ -2258,11 +2258,18 @@
   </div>
   <div id="design-settings-panel" class="design-settings-panel" hidden>
     <div class="section-title">Designマスター</div>
-    <div class="section-note">新しいDesignはここで登録します。登録だけでは在庫・SKU・制作タスク・原価は作成されません。</div>
+    <div class="section-note">新しいDesignの登録と、Designごとの定番Body・Colorをここで管理します。</div>
     <div id="design-master-list" class="design-master-list"></div>
     <div class="design-add-grid">
       <input id="new-design-management" type="text" placeholder="新しいDesign名" aria-label="新しいDesign名" />
       <button id="add-design-master-btn" class="icon-btn" type="button" aria-label="Designを追加">＋</button>
+    </div>
+    <div class="section-divider">
+      <div class="section-title">定番のBody・Color</div>
+      <div class="section-note">Designを選び、通常使うBody・Colorの組み合わせを追加・整理します。定番から外しても実在庫・SKU・制作タスクは削除されません。</div>
+      <label class="field-label" for="design-combo-design-select">Design</label>
+      <select id="design-combo-design-select" class="master-select"></select>
+      <div id="design-combinations-management"></div>
     </div>
   </div>
 
@@ -2333,7 +2340,6 @@
   <div id="inventory-design-panel">
     <div class="tabs" id="design-tabs"></div>
     <div id="app"></div>
-    <div id="design-combinations"></div>
   </div>
   <div class="add-row legacy-editor-row">
     <input id="new-color" type="text" placeholder="色を追加(例:ネイビー)" />
@@ -3827,15 +3833,26 @@ async function saveMasterData(fields){
 
 function renderDesignSettings(){
   const box = document.getElementById('design-master-list');
-  if(!box) return;
+  const select = document.getElementById('design-combo-design-select');
+  if(!box || !select) return;
   if(!masterReady || !masterDocument){
     box.innerHTML = '<div class="production-empty">マスターデータに接続すると編集できます。</div>';
+    select.innerHTML = '';
+    renderManagementDesignCombinations();
     return;
   }
   const designs = masterDesigns();
   box.innerHTML = designs.length
     ? designs.map(design => `<div class="design-master-row"><span class="design-master-name">${design.starred ? '★ ' : ''}${escapeHtml(design.managementName || design.legacyKey || design.id)}</span><span class="design-master-meta">${escapeHtml(design.id)}</span></div>`).join('')
     : '<div class="production-empty">Designはまだ登録されていません。</div>';
+
+  const activeMaster = masterDesignByName(state.activeDesign);
+  if(!designs.some(design => design.id === managementDesignId)){
+    managementDesignId = activeMaster?.id || designs[0]?.id || '';
+  }
+  select.innerHTML = designs.map(design => `<option value="${escapeHtml(design.id)}" ${design.id===managementDesignId?'selected':''}>${escapeHtml(design.managementName || design.legacyKey || design.id)}</option>`).join('');
+  select.disabled = designs.length === 0;
+  renderManagementDesignCombinations();
 }
 
 async function addDesignMaster(){
@@ -3884,6 +3901,7 @@ async function addDesignMaster(){
   const nextShared = buildSharedDesignsFromMaster();
   state.designs = nextShared;
   state.activeDesign = name;
+  managementDesignId = id;
   if(!state.activePlanDesign) state.activePlanDesign = name;
   saveLocal();
 
@@ -7264,6 +7282,7 @@ let reviewIncludeZero = false;
 // Direct quantity edits are serialized because inventory_v2 is saved as one top-level map.
 let inventoryDirectSaveQueue = Promise.resolve();
 let taskDesignFilter = '';
+let managementDesignId = '';
 function comboKey(bodyId, colorId){ return `${bodyId}|${colorId}`; }
 function designComboSettings(designId){
   const record = masterDocument?.display_preferences?.[designId];
@@ -7312,48 +7331,70 @@ function comboPairQuantity(designId, pair){
   return Object.values(masterDocument?.inventory_v2?.[bodyId]?.[designId]?.[colorId] || {})
     .reduce((sum,cell)=>sum+Math.max(0,Number(cell?.qty||0)),0);
 }
-function renderDesignCombinations(){
-  const box = document.getElementById('design-combinations');
+function renderManagementDesignCombinations(){
+  const box = document.getElementById('design-combinations-management');
   if(!box) return;
-  if(!inventoryAuthorityActive()) { box.innerHTML=''; return; }
-  const design = masterDesignByName(state.activeDesign);
-  if(!design){box.innerHTML='';return;}
+  if(!inventoryAuthorityActive()) {
+    box.innerHTML = '<div class="section-note" style="margin-top:10px;">実在庫マスター接続後に定番設定を編集できます。</div>';
+    return;
+  }
+  const design = masterDocument?.masters?.designs?.[managementDesignId];
+  if(!design){ box.innerHTML=''; return; }
+
   const selected = savedComboPairs(design.id);
   seedInitialDesignCombos(design.id);
-  const hidden = new Set(selected);
-  const bodies = assignableBodies(), colors = masterColors();
+  const selectedSet = new Set(selected);
+  const bodies = assignableBodies();
+  const colors = masterColors();
   const bodyNames = masterDocument?.masters?.bodies || {};
   const colorNames = masterDocument?.masters?.colors || {};
-  const archived = proposedComboPairs(design.id).filter(pair=>!hidden.has(pair));
-  box.innerHTML = `<details class="combo-panel" data-disclosure-key="combo-settings:${escapeHtml(design.id)}"><summary><strong>定番のBody・Colorを編集</strong> (${selected.length})</summary>
-    <div class="section-note" style="margin-top:8px;">表示設定のみ変更します。非表示にしても実在庫・SKU・制作タスクは残り、在庫一覧には表示されます。</div>
-    ${selected.map(pair=>{const [b,c]=pair.split('|'); const qty=comboPairQuantity(design.id,pair);return `<div class="combo-row"><span>${escapeHtml(bodyNames[b]?.managementName||b)} / ${escapeHtml(colorNames[c]?.managementName||c)}${qty?` · 在庫 ${qty}枚`:''}</span><button type="button" data-combo-hide="${escapeHtml(pair)}">非表示</button></div>`;}).join('') || '<div class="section-note">定番の組み合わせがありません。下から追加してください。</div>'}
-    <div class="combo-controls"><label class="field-label">Body<select id="combo-add-body">${bodies.map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===state.finishedBodyId?'selected':''}>${escapeHtml(b.managementName||b.id)}</option>`).join('')}</select></label>
-    <label class="field-label">Color<select id="combo-add-color">${colors.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.managementName||c.id)}</option>`).join('')}</select></label>
-    <button class="full" type="button" id="combo-add-btn">＋ 定番の組み合わせに追加</button></div>
-    ${archived.length?`<div class="section-note" style="margin-top:12px;">定番に含まれない在庫・タスクの組み合わせ</div>${archived.map(pair=>{const [b,c]=pair.split('|');return `<div class="combo-row"><span>${escapeHtml(bodyNames[b]?.managementName||b)} / ${escapeHtml(colorNames[c]?.managementName||c)}</span><button type="button" data-combo-restore="${escapeHtml(pair)}">再表示</button></div>`;}).join('')}`:''}
-  </details>`;
+  const archived = proposedComboPairs(design.id).filter(pair=>!selectedSet.has(pair));
+
+  box.innerHTML = `<div class="combo-panel" style="margin-top:10px;">
+    <div class="section-note">定番 ${selected.length}組</div>
+    ${selected.map(pair=>{
+      const [b,c]=pair.split('|');
+      const qty=comboPairQuantity(design.id,pair);
+      return `<div class="combo-row"><span>${escapeHtml(bodyNames[b]?.managementName||b)} / ${escapeHtml(colorNames[c]?.managementName||c)}${qty?` · 在庫 ${qty}枚`:''}</span><button type="button" data-combo-hide="${escapeHtml(pair)}">定番から外す</button></div>`;
+    }).join('') || '<div class="section-note">定番の組み合わせがありません。下から追加してください。</div>'}
+    <div class="combo-controls">
+      <label class="field-label">Body<select id="combo-add-body">${bodies.map(b=>`<option value="${escapeHtml(b.id)}">${escapeHtml(b.managementName||b.id)}</option>`).join('')}</select></label>
+      <label class="field-label">Color<select id="combo-add-color">${colors.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.managementName||c.id)}</option>`).join('')}</select></label>
+      <button class="full" type="button" id="combo-add-btn">＋ 定番に追加</button>
+    </div>
+    ${archived.length?`<div class="section-note" style="margin-top:12px;">定番から外れている在庫・タスクの組み合わせ</div>${archived.map(pair=>{
+      const [b,c]=pair.split('|');
+      return `<div class="combo-row"><span>${escapeHtml(bodyNames[b]?.managementName||b)} / ${escapeHtml(colorNames[c]?.managementName||c)}</span><button type="button" data-combo-restore="${escapeHtml(pair)}">定番に戻す</button></div>`;
+    }).join('')}`:''}
+  </div>`;
+
   box.querySelectorAll('[data-combo-hide]').forEach(btn=>btn.addEventListener('click',async()=>{
-    const pair=btn.getAttribute('data-combo-hide'); const qty=comboPairQuantity(design.id,pair);
-    if(qty && !confirm(`この組み合わせには完成品が ${qty}枚あります。Design別の表示から隠しますか？\n在庫一覧と実在庫には残ります。`))return;
+    const pair=btn.getAttribute('data-combo-hide');
+    const qty=comboPairQuantity(design.id,pair);
+    if(qty && !confirm(`この組み合わせには完成品が ${qty}枚あります。定番から外しますか？\n実在庫・SKU・制作タスクは残ります。`)) return;
     btn.disabled=true;
-    if(await setSavedComboPairs(design.id,savedComboPairs(design.id).filter(x=>x!==pair))){render();renderDesignCombinations();}
-    else btn.disabled=false;
+    if(await setSavedComboPairs(design.id,savedComboPairs(design.id).filter(x=>x!==pair))){
+      renderManagementDesignCombinations();
+    } else btn.disabled=false;
   }));
+
   box.querySelectorAll('[data-combo-restore]').forEach(btn=>btn.addEventListener('click',async()=>{
     btn.disabled=true;
-    if(await setSavedComboPairs(design.id,[...savedComboPairs(design.id),btn.getAttribute('data-combo-restore')])){render();renderDesignCombinations();}
-    else btn.disabled=false;
+    if(await setSavedComboPairs(design.id,[...savedComboPairs(design.id),btn.getAttribute('data-combo-restore')])){
+      renderManagementDesignCombinations();
+    } else btn.disabled=false;
   }));
+
   box.querySelector('#combo-add-btn')?.addEventListener('click',async e=>{
     const pair=comboKey(box.querySelector('#combo-add-body')?.value||'',box.querySelector('#combo-add-color')?.value||'');
-    if(pair.startsWith('|') || pair.endsWith('|'))return;
+    if(pair.startsWith('|') || pair.endsWith('|')) return;
     e.currentTarget.disabled=true;
-    if(await setSavedComboPairs(design.id,[...savedComboPairs(design.id),pair])){render();renderDesignCombinations();}
-    else e.currentTarget.disabled=false;
+    if(await setSavedComboPairs(design.id,[...savedComboPairs(design.id),pair])){
+      renderManagementDesignCombinations();
+    } else e.currentTarget.disabled=false;
   });
-  applyDisclosureState(box);
 }
+
 function comboColorsForCurrentDesign(designName,bodyId){
   if(!inventoryAuthorityActive())return state.designs?.[designName]?.colors || [];
   const design=masterDesignByName(designName);
@@ -7881,7 +7922,6 @@ function renderCurrentView(){
     renderFinishedBodySelector();
     renderTabs();
     render();
-    renderDesignCombinations();
     renderFinishedDisplayMode();
   } else if(state.activeView === 'assign'){
     renderBodyAssignment();
@@ -8065,7 +8105,7 @@ function renderTabs(){
   tabs.querySelectorAll('[data-select-design]').forEach(btn=>btn.addEventListener('click',()=>{
     state.activeDesign=btn.getAttribute('data-select-design');
     disclosureState['finished-design-picker']=false; saveDisclosureState();
-    renderTabs();render();renderDesignCombinations();saveLocal();
+    renderTabs();render();saveLocal();
   }));
   applyDisclosureState(tabs);
 }
@@ -8107,7 +8147,7 @@ function render(){
   if(visibleColors.length > 0){
     html += '<div class="size-header">' + SIZES.map(s => `<div>${s}</div>`).join('') + '</div>';
   } else {
-    html += '<p class="empty-note">このDesignの定番組み合わせは未設定です。下の「定番のBody・Colorを編集」から追加してください。</p>';
+    html += '<p class="empty-note">このDesignの定番組み合わせは未設定です。「管理 → Design設定」から追加してください。</p>';
   }
 
   visibleColors.forEach(color => {
@@ -8167,7 +8207,6 @@ function render(){
       }
       renderTabs();
       render();
-      renderDesignCombinations();
     });
   }
 
@@ -8315,6 +8354,11 @@ document.getElementById('design-settings-toggle').addEventListener('click', () =
   if(!panel.hidden) renderDesignSettings();
 });
 
+document.getElementById('design-combo-design-select').addEventListener('change', e => {
+  managementDesignId = e.target.value;
+  renderManagementDesignCombinations();
+});
+
 document.getElementById('body-settings-toggle').addEventListener('click', () => {
   const panel = document.getElementById('body-settings-panel');
   panel.hidden = !panel.hidden;
@@ -8352,7 +8396,6 @@ document.getElementById('finished-body-select').addEventListener('change', e => 
   saveLocal();
   renderTabs();
   render();
-  renderDesignCombinations();
   if(state.finishedDisplayMode === 'list') renderInventoryOverview();
 });
 

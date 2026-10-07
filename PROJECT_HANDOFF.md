@@ -219,6 +219,14 @@ Registration behavior:
 * sets no finished inventory, blank Body stock, sheet stock, SKU, production task, order, or cost by itself;
 * the Design becomes available to inventory, sheet, task, and cost selectors that already read the Design master.
 
+
+Design regular-combination management:
+
+* the old `定番のBody・Colorを編集` control is managed from **管理 → Design設定**;
+* select a Design there, then add Body × Color combinations to the Design's regular display set or remove them from that set;
+* removing a combination from the regular set changes only `display_preferences`; it does not delete finished inventory, SKU identity, production tasks, blank stock, sheet stock, orders, or cost data;
+* combinations that still exist in inventory or production tasks remain recoverable as `定番に戻す` candidates.
+
 ### Blank/unprinted T-shirts
 
 Fields include:
