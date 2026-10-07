@@ -60,6 +60,7 @@ Top-level categories:
   - Customer Orders
 - **管理**
   - 原価
+  - Design設定
   - Body設定
   - Color設定
 
@@ -206,6 +207,17 @@ Do not merge these semantics with direct inventory entry.
 ---
 
 ## 7. Other managed areas
+
+### Design master registration
+
+New Designs are registered from **管理 → Design設定**.
+
+Registration behavior:
+
+* writes the new Design to `tshirtStock/master.masters.designs` with a stable Design ID;
+* also refreshes the compatibility `tshirtStock/shared.designs` catalog entry;
+* sets no finished inventory, blank Body stock, sheet stock, SKU, production task, order, or cost by itself;
+* the Design becomes available to inventory, sheet, task, and cost selectors that already read the Design master.
 
 ### Blank/unprinted T-shirts
 
