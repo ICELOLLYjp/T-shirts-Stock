@@ -510,14 +510,16 @@
     background: var(--card);
     color: var(--text);
   }
-  .body-settings-panel {
+  .body-settings-panel,
+  .design-settings-panel {
     margin: 0 0 14px;
     padding: 12px;
     border-radius: 12px;
     border: 1px solid var(--border);
     background: var(--card);
   }
-  .body-settings-panel[hidden] { display: none; }
+  .body-settings-panel[hidden],
+  .design-settings-panel[hidden] { display: none; }
   .body-master-row {
     display: grid;
     grid-template-columns: minmax(90px, 0.9fr) minmax(120px, 1.3fr);
@@ -548,6 +550,58 @@
     border-top: 1px solid var(--border);
   }
   .body-add-grid button {
+    width: 42px;
+    height: 40px;
+  }
+  .design-master-list {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .design-master-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 38px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+  }
+  .design-master-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .design-master-meta {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .design-add-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .design-add-grid input {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 9px;
+    font-size: 14px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .design-add-grid button {
     width: 42px;
     height: 40px;
   }
@@ -1591,6 +1645,7 @@
     .stock-summary,
     .production-summary,
     .body-settings-panel,
+    .design-settings-panel,
     .color-settings-panel,
     .finished-master-bar {
       border-radius: 14px;
@@ -2197,9 +2252,20 @@
 
 <div id="management-tools" class="management-tools" hidden>
   <div class="master-tools" style="gap:8px;">
+    <button id="design-settings-toggle" class="secondary-btn" type="button">Design設定</button>
     <button id="body-settings-toggle" class="secondary-btn" type="button">Body設定</button>
     <button id="color-settings-toggle" class="secondary-btn" type="button">Color設定</button>
   </div>
+  <div id="design-settings-panel" class="design-settings-panel" hidden>
+    <div class="section-title">Designマスター</div>
+    <div class="section-note">新しいDesignはここで登録します。登録だけでは在庫・SKU・制作タスク・原価は作成されません。</div>
+    <div id="design-master-list" class="design-master-list"></div>
+    <div class="design-add-grid">
+      <input id="new-design-management" type="text" placeholder="新しいDesign名" aria-label="新しいDesign名" />
+      <button id="add-design-master-btn" class="icon-btn" type="button" aria-label="Designを追加">＋</button>
+    </div>
+  </div>
+
   <div id="body-settings-panel" class="body-settings-panel" hidden>
     <div class="section-title">Bodyマスター</div>
     <div class="section-note">管理用名称は在庫管理用です。販売用名称はPinkoiなどの表示名として使えます。</div>
@@ -3757,6 +3823,91 @@ async function saveMasterData(fields){
     renderSchemaStatus();
     return false;
   }
+}
+
+function renderDesignSettings(){
+  const box = document.getElementById('design-master-list');
+  if(!box) return;
+  if(!masterReady || !masterDocument){
+    box.innerHTML = '<div class="production-empty">マスターデータに接続すると編集できます。</div>';
+    return;
+  }
+  const designs = masterDesigns();
+  box.innerHTML = designs.length
+    ? designs.map(design => `<div class="design-master-row"><span class="design-master-name">${design.starred ? '★ ' : ''}${escapeHtml(design.managementName || design.legacyKey || design.id)}</span><span class="design-master-meta">${escapeHtml(design.id)}</span></div>`).join('')
+    : '<div class="production-empty">Designはまだ登録されていません。</div>';
+}
+
+async function addDesignMaster(){
+  if(!masterReady || !masterDocument) return false;
+  const input = document.getElementById('new-design-management');
+  if(!input) return false;
+  const name = input.value.trim();
+  input.classList.remove('error');
+  if(!name){
+    input.classList.add('error');
+    input.placeholder = 'Design名を入力してください';
+    return false;
+  }
+
+  const designsMap = { ...(masterDocument.masters?.designs || {}) };
+  const normalized = name.toLocaleLowerCase('en-US');
+  const existing = Object.values(designsMap).find(item =>
+    String(item?.managementName || '').trim().toLocaleLowerCase('en-US') === normalized ||
+    String(item?.legacyKey || '').trim().toLocaleLowerCase('en-US') === normalized
+  );
+  if(existing){
+    input.classList.add('error');
+    alert('同じDesign名がすでに登録されています。');
+    return false;
+  }
+
+  let id = stableId('design', name);
+  let suffix = 2;
+  while(designsMap[id]) id = stableId('design', `${name}_${suffix++}`);
+  const createdAt = nowIso();
+  designsMap[id] = {
+    id,
+    managementName: name,
+    salesName: name,
+    legacyKey: name,
+    starred: false,
+    createdAt,
+    updatedAt: createdAt
+  };
+
+  const masters = { ...(masterDocument.masters || {}), designs: designsMap };
+  masterDocument = { ...masterDocument, masters };
+  const saved = await saveMasterData({ masters });
+  if(saved === false) return false;
+
+  const nextShared = buildSharedDesignsFromMaster();
+  state.designs = nextShared;
+  state.activeDesign = name;
+  if(!state.activePlanDesign) state.activePlanDesign = name;
+  saveLocal();
+
+  if(cloudReady){
+    try {
+      await updateDoc(sharedRef, {
+        designs: nextShared,
+        updatedAt: serverTimestamp(),
+        inventorySource: 'tshirtStock/master'
+      });
+      sharedDocument = { ...(sharedDocument || {}), designs: nextShared, inventorySource:'tshirtStock/master' };
+      setSyncStatus('共有済み', 'ok');
+    } catch(error){
+      console.error('new design shared sync failed', error);
+      setSyncStatus(`Design同期エラー：${error.code || 'unknown'}`, 'error');
+    }
+  }
+
+  input.value = '';
+  renderDesignSettings();
+  renderTabs();
+  renderSheetInventory();
+  renderSchemaStatus(masterDocument);
+  return true;
 }
 
 function renderBodySettings(){
@@ -7072,7 +7223,7 @@ const CATEGORY_META = {
   stock: { label:'在庫', note:'完成品と材料の残数を確認・更新' },
   production: { label:'制作', note:'制作タスクと加工の流れを管理' },
   orders: { label:'受発注', note:'お客様のオーダーを管理' },
-  manage: { label:'管理', note:'原価とBody・Color設定を管理' }
+  manage: { label:'管理', note:'原価とDesign・Body・Color設定を管理' }
 };
 function categoryForView(view){
   if(['finished','blank','sheets'].includes(view)) return 'stock';
@@ -7720,6 +7871,7 @@ function renderCustomerOrders(){
   applyDisclosureState(box);
 }
 function renderCurrentView(){
+  renderDesignSettings();
   renderBodySettings();
   renderColorSettings();
   if(inventoryAuthorityActive()) document.body.classList.add('master-authority');
@@ -8157,6 +8309,12 @@ document.querySelectorAll('#category-nav button[data-default-view]').forEach(btn
   btn.addEventListener('click', () => setActiveView(btn.getAttribute('data-default-view')));
 });
 
+document.getElementById('design-settings-toggle').addEventListener('click', () => {
+  const panel = document.getElementById('design-settings-panel');
+  panel.hidden = !panel.hidden;
+  if(!panel.hidden) renderDesignSettings();
+});
+
 document.getElementById('body-settings-toggle').addEventListener('click', () => {
   const panel = document.getElementById('body-settings-panel');
   panel.hidden = !panel.hidden;
@@ -8167,6 +8325,14 @@ document.getElementById('color-settings-toggle').addEventListener('click', () =>
   const panel = document.getElementById('color-settings-panel');
   panel.hidden = !panel.hidden;
   if(!panel.hidden) renderColorSettings();
+});
+
+document.getElementById('add-design-master-btn').addEventListener('click', addDesignMaster);
+document.getElementById('new-design-management').addEventListener('keydown', e => {
+  if(e.key === 'Enter') addDesignMaster();
+});
+document.getElementById('new-design-management').addEventListener('input', e => {
+  e.target.classList.remove('error');
 });
 
 document.getElementById('add-body-btn').addEventListener('click', addBodyMaster);
