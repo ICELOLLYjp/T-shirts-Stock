@@ -2290,6 +2290,7 @@
     <div id="color-mapping-warning"></div>
     <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>標準Body</span></div>
     <div id="color-master-list"></div>
+    <details><summary>メーカー品番・正式カラーの一括確認・編集</summary><div id="manufacturer-color-editor"></div></details>
     <div class="color-mapping-note">標準Bodyは入力補助です。必要に応じて、どのBodyにも任意のColorを組み合わせて在庫・制作タスクを登録できます。</div>
   </div>
 </div>
@@ -2424,6 +2425,7 @@
 
 <script type="module">
 import "./manufacturerColors.js?v=20261008-1";
+import "./manufacturerColorEditor.js?v=20261008-1";
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut,
@@ -2431,7 +2433,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
-  collection, getDocs, getDocsFromServer
+  collection, getDocs, getDocsFromServer, runTransaction
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -3333,6 +3335,34 @@ async function normalizeFinishedInventoryByColorMaster(){
     colorAuthorityNormalizeBusy = false;
   }
 }
+
+let manufacturerEditorMounted = false;
+async function openManufacturerEditor(){
+  if(manufacturerEditorMounted || !masterReady || !isAllowedUser(auth.currentUser)) return;
+  const response = await fetch('./manufacturer-models.json?v=20261008-1');
+  if(!response.ok) throw Error('メーカー資料を読み込めません。');
+  const models = await response.json();
+  globalThis.IcelollyManufacturerColorEditor.mount({
+    panel: document.getElementById('manufacturer-color-editor'), models,
+    getMaster: () => masterDocument,
+    save: async input => {
+      if(!isAllowedUser(auth.currentUser)) throw Error('編集権限を確認してください。');
+      await runTransaction(db, async transaction => {
+        const current = await transaction.get(masterRef);
+        if(!current.exists()) throw Error('マスターを読み込めません。');
+        const patch = globalThis.IcelollyManufacturerColorEditor.plan(current.data(), input.baseline, input.rows, input.models, input.operationId, input.at);
+        if(patch) transaction.update(masterRef, patch);
+      });
+      const fresh = await getDocFromServer(masterRef);
+      masterDocument = fresh.data();
+      renderColorSettings();
+    }
+  });
+  manufacturerEditorMounted = true;
+}
+document.getElementById('manufacturer-color-editor').parentElement.addEventListener('toggle', e => {
+  if(e.currentTarget.open) openManufacturerEditor().catch(e => { document.getElementById('manufacturer-color-editor').textContent = e.message; });
+});
 
 function renderColorSettings(){
   const panel = document.getElementById('color-settings-panel');

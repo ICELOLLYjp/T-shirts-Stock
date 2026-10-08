@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
-      - run: node --test tests/manufacturerColors.test.cjs
+      - run: node --test tests/*.test.cjs
       - name: Inventory module syntax
         run: |
           python3 - <<'PYTHON'
@@ -26,3 +26,6 @@ jobs:
           Path('stock-module.mjs').write_text(source.split('<script type="module">', 1)[1].split('</script>', 1)[0])
           PYTHON
           node --check stock-module.mjs
+
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.62.1
+      - run: PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(command -v google-chrome)" node tests/manufacturerColorEditor.browser.cjs

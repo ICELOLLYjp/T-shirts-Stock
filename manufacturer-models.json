@@ -1,0 +1,371 @@
+[
+  {
+    "model": "OGB-910",
+    "brand": "TRUSS / ORGABITS",
+    "supplierId": "felic",
+    "url": "https://www.truss-wear.jp/items/index.php?page=info&code=OGB-910",
+    "checked": "2026-10-08",
+    "sourceKind": "official_page",
+    "sizes": [
+      {
+        "label": "110",
+        "code": "110"
+      },
+      {
+        "label": "130",
+        "code": "130"
+      },
+      {
+        "label": "150",
+        "code": "150"
+      },
+      {
+        "label": "S",
+        "code": "S"
+      },
+      {
+        "label": "M",
+        "code": "M"
+      },
+      {
+        "label": "L",
+        "code": "L"
+      },
+      {
+        "label": "XL",
+        "code": "XL"
+      },
+      {
+        "label": "XXL",
+        "code": "XXL"
+      }
+    ],
+    "skuPattern": null,
+    "colors": [
+      {
+        "code": "01",
+        "symbol": "WHT",
+        "name": "ホワイト",
+        "sizes": [
+          "110",
+          "130",
+          "150",
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "02",
+        "symbol": "BLK",
+        "name": "ブラック",
+        "sizes": [
+          "110",
+          "130",
+          "150",
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "34",
+        "symbol": "LPL",
+        "name": "ライトパープル",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "55",
+        "symbol": "DPK",
+        "name": "ダスティピンク",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "57",
+        "symbol": "ABL",
+        "name": "アシッドブルー",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "60",
+        "symbol": "NTR",
+        "name": "ナチュラル",
+        "sizes": [
+          "110",
+          "130",
+          "150",
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "62",
+        "symbol": "SHG",
+        "name": "シャロウグリーン",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "77",
+        "symbol": "SKR",
+        "name": "スミクロ",
+        "sizes": [
+          "110",
+          "130",
+          "150",
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "91",
+        "symbol": "PNV",
+        "name": "パープルネイビー",
+        "sizes": [
+          "110",
+          "130",
+          "150",
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "97",
+        "symbol": "MGY",
+        "name": "ミルキーグレー",
+        "sizes": [
+          "110",
+          "130",
+          "150",
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      }
+    ]
+  },
+  {
+    "model": "JPC-001",
+    "brand": "COTTON RESEARCH CLUB",
+    "supplierId": "felic",
+    "url": "https://www.truss-wear.jp/items/index.php?page=info&code=JPC-001",
+    "checked": "2026-10-08",
+    "sourceKind": "official_page",
+    "sizes": [
+      {
+        "label": "S",
+        "code": "S"
+      },
+      {
+        "label": "M",
+        "code": "M"
+      },
+      {
+        "label": "L",
+        "code": "L"
+      },
+      {
+        "label": "XL",
+        "code": "XL"
+      },
+      {
+        "label": "XXL",
+        "code": "XXL"
+      }
+    ],
+    "skuPattern": null,
+    "colors": [
+      {
+        "code": "01",
+        "symbol": "",
+        "name": "ホワイト",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "02",
+        "symbol": "",
+        "name": "ブラック",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "04",
+        "symbol": "",
+        "name": "ヘザーグレー",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      }
+    ]
+  },
+  {
+    "model": "DF1101D",
+    "brand": "D-FACTORY",
+    "supplierId": "sloth",
+    "url": "https://sloth-ethical.com/product.php?id=43",
+    "checked": "2026-10-08",
+    "sourceKind": "official_page",
+    "sizes": [
+      {
+        "label": "S",
+        "code": "02"
+      },
+      {
+        "label": "M",
+        "code": "03"
+      },
+      {
+        "label": "L",
+        "code": "04"
+      },
+      {
+        "label": "XL",
+        "code": "05"
+      },
+      {
+        "label": "XXL",
+        "code": "06"
+      }
+    ],
+    "skuPattern": "{model}-{color}-{size}",
+    "colors": [
+      {
+        "code": "501",
+        "symbol": "",
+        "name": "ヴィンテージホワイト",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "502",
+        "symbol": "",
+        "name": "ヴィンテージブラック",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "503",
+        "symbol": "",
+        "name": "ヴィンテージネイビー",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "504",
+        "symbol": "",
+        "name": "ヴィンテージレッド",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "505",
+        "symbol": "",
+        "name": "ヴィンテージパープル",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "506",
+        "symbol": "",
+        "name": "ヴィンテージサックス",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      },
+      {
+        "code": "507",
+        "symbol": "",
+        "name": "ヴィンテージアイスグレー",
+        "sizes": [
+          "S",
+          "M",
+          "L",
+          "XL",
+          "XXL"
+        ]
+      }
+    ]
+  }
+]
