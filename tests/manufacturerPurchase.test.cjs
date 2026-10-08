@@ -1,0 +1,12 @@
+const test=require('node:test'),assert=require('node:assert/strict');require('../manufacturerColors.js');const {resolve}=require('../manufacturerPurchase.js');
+const fresh=()=>({masters:{bodies:{b:{}},colors:{c:{}}},manufacturer_color_links:{schemaVersion:1,revision:1,items:{'b|c':{bodyId:'b',colorId:'c',supplierId:'felic',productCode:'OGB-910',colorCode:'97',colorSymbol:'MGY',officialName:'ミルキーグレー',version:1,confirmedDate:'2026-10-08',sourceCheckedDate:'2026-10-08'}}}});
+test('numeric and symbol aliases use exact shared IDs without names or writes',()=>{const m=fresh(),before=JSON.stringify(m);for(const code of ['97','mgy']){const r=resolve(m,'OGB-910',code);assert.equal(r.state,'shared');assert.equal(r.row.colorId,'c');}assert.equal(JSON.stringify(m),before);});
+test('old saved target and obsolete default cannot override changed shared correspondence',()=>{const m=fresh();assert.equal(resolve(m,'OGB-910','MGY',{bodyId:'other',colorId:'other'}).state,'blocked');assert.equal(resolve(m,'OGB-910','NTR',{bodyId:'b',colorId:'c'}).state,'blocked');assert.equal(resolve(m,'OTHER','X',{bodyId:'other',colorId:'other'}).state,'legacy');});
+test('ambiguous and malformed shared records stay unconfirmed',()=>{const m=fresh();m.masters.colors.other={};m.manufacturer_color_links.items['b|other']={...m.manufacturer_color_links.items['b|c'],colorId:'other'};assert.equal(resolve(m,'OGB-910','97').state,'blocked');delete m.manufacturer_color_links.items['b|other'];m.manufacturer_color_links.revision=0;assert.equal(resolve(m,'OGB-910','97').state,'blocked');});
+test('actual purchase resolver uses shared identifiers and rejects conflicting saved indices',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
+ const start=source.indexOf('function resolvePurchaseMapping('),end=source.indexOf('\nfunction ',start+20),m=fresh();m.purchase_item_mappings={};
+ const context=vm.createContext({masterDocument:m,IcelollyManufacturerPurchase:globalThis.IcelollyManufacturerPurchase,purchaseMappingKey:(p,c)=>p.toUpperCase()+'|'+c.toUpperCase(),purchaseSavedMappings:()=>m.purchase_item_mappings,DEFAULT_PURCHASE_ITEM_MAPPINGS:[]});
+ vm.runInContext(source.slice(start,end),context);assert.equal(vm.runInContext("resolvePurchaseMapping('OGB-910','MGY').source",context),'manufacturer_shared');
+ m.purchase_item_mappings['OGB-910|MGY']={bodyId:'foreign',colorId:'foreign'};assert.equal(vm.runInContext("resolvePurchaseMapping('OGB-910','MGY')",context),null);
+});

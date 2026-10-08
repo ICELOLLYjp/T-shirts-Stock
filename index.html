@@ -2426,6 +2426,7 @@
 <script type="module">
 import "./manufacturerColors.js?v=20261008-1";
 import "./manufacturerColorEditor.js?v=20261008-1";
+import "./manufacturerPurchase.js?v=20261008-1";
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut,
@@ -5574,6 +5575,14 @@ function resolvePurchaseMapping(product, supplierColor){
   const saved = purchaseSavedMappings()?.[key];
   const bodies = masterDocument?.masters?.bodies || {};
   const colors = masterDocument?.masters?.colors || {};
+  const shared = globalThis.IcelollyManufacturerPurchase.resolve(masterDocument, product, supplierColor, saved);
+  if(shared.state === 'blocked') return null;
+  if(shared.row){
+    const row = shared.row;
+    return { key, product: row.productCode, supplierColor: String(supplierColor).trim().toUpperCase(), supplierLabel: row.officialName,
+      bodyId: row.bodyId, bodyName: bodies[row.bodyId]?.managementName || row.bodyId,
+      colorId: row.colorId, colorName: colors[row.colorId]?.managementName || row.colorId, source: 'manufacturer_shared' };
+  }
   if(saved?.bodyId && saved?.colorId && bodies[saved.bodyId] && colors[saved.colorId]){
     return {
       key,
@@ -5596,6 +5605,7 @@ function resolvePurchaseMapping(product, supplierColor){
   const body = findMasterByManagementName(bodies, fallback.bodyName);
   const color = findMasterByManagementName(colors, fallback.colorName);
   if(!body || !color) return null;
+  if(globalThis.IcelollyManufacturerPurchase.resolve(masterDocument, product, supplierColor, {bodyId: body.id, colorId: color.id}).state === 'blocked') return null;
   return {
     key,
     product: fallback.product,
@@ -5722,8 +5732,13 @@ function purchaseColorOptions(selectedId = ''){
   return masterColors().map(color => `<option value="${escapeHtml(color.id)}" ${selectedId === color.id ? 'selected' : ''}>${escapeHtml(color.managementName || color.id)}</option>`).join('');
 }
 
+function purchaseSharedModelLocked(product){
+  return globalThis.IcelollyManufacturerColors.list(masterDocument).some(row => row.productCode === String(product || '').trim().toUpperCase());
+}
+
 async function savePurchaseColorMapping(unknown, colorId){
   if(!masterReady || !masterDocument || !unknown?.product || !unknown?.supplierColor || !colorId) return false;
+  if(purchaseSharedModelLocked(unknown.product)){ alert('この品番は共通メーカー対応で管理しています。Color設定の一括確認・編集で対応を確認してください。'); return false; }
   const bodyId = unknown.bodyId || suggestedBodyForPurchaseProduct(unknown.product)?.id || '';
   const color = masterDocument?.masters?.colors?.[colorId];
   if(!bodyId || !color){
@@ -5747,6 +5762,7 @@ async function savePurchaseColorMapping(unknown, colorId){
 
 async function createPurchaseColorAndMapping(unknown, managementName){
   if(!masterReady || !masterDocument) return false;
+  if(purchaseSharedModelLocked(unknown?.product)){ alert('この品番は共通メーカー対応で管理しています。既存のColorと正式カラーをColor設定で確認してください。新しい管理Colorは別途追加してから対応します。'); return false; }
   const name = String(managementName || '').trim();
   if(!name){
     alert('新しいColor名を入力してください。');
