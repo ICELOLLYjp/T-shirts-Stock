@@ -2423,6 +2423,7 @@
 </div>
 
 <script type="module">
+import "./manufacturerColors.js?v=20261008-1";
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut,
@@ -3354,7 +3355,9 @@ function renderColorSettings(){
     warning.innerHTML = '';
   }
 
+  const manufacturerRows = globalThis.IcelollyManufacturerColors.list(masterDocument);
   list.innerHTML = colors.map(color => {
+    const manufacturer = manufacturerRows.filter(row => row.colorId === color.id).map(row => `${masterDocument.masters.bodies[row.bodyId]?.managementName || row.bodyId} / ${row.productCode} / ${row.officialName} (${row.colorCode})`).join("、");
     const usage = colorUsageBodyIds(color.id);
     const hasConflict = usage.length > 1;
     const options = [
@@ -3362,7 +3365,7 @@ function renderColorSettings(){
       ...bodies.map(body => `<option value="${escapeHtml(body.id)}" ${color.bodyId === body.id ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`)
     ].join('');
     return `<div class="color-master-row">
-      <input type="text" data-color-management="${escapeHtml(color.id)}" value="${escapeHtml(color.managementName || '')}" readonly>
+      <div><input type="text" data-color-management="${escapeHtml(color.id)}" value="${escapeHtml(color.managementName || '')}" readonly><small class="color-manufacturer" style="display:block;overflow-wrap:anywhere;margin-top:5px;color:var(--text-secondary)">${escapeHtml(manufacturer || "メーカー対応未確認")}</small></div>
       <input type="text" data-color-sales="${escapeHtml(color.id)}" value="${escapeHtml(color.pinkoiName || color.managementName || '')}" placeholder="販売用名称">
       <select data-color-body="${escapeHtml(color.id)}" data-color-conflict="${hasConflict ? '1' : '0'}">${options}</select>
     </div>`;
@@ -8723,6 +8726,3 @@ startAuthGate();
     next.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, true);
 })();
-</script>
-</body>
-</html>
