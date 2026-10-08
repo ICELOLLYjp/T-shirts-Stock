@@ -2290,6 +2290,7 @@
     <div id="color-mapping-warning"></div>
     <div class="color-master-head"><span>管理名</span><span>販売用名称</span><span>標準Body</span></div>
     <div id="color-master-list"></div>
+    <details><summary>メーカー品番・正式カラーの一括確認・編集</summary><div id="manufacturer-color-editor"></div></details>
     <div class="color-mapping-note">標準Bodyは入力補助です。必要に応じて、どのBodyにも任意のColorを組み合わせて在庫・制作タスクを登録できます。</div>
   </div>
 </div>
@@ -2423,6 +2424,9 @@
 </div>
 
 <script type="module">
+import "./manufacturerColors.js?v=20261008-1";
+import "./manufacturerColorEditor.js?v=20261008-1";
+import "./manufacturerPurchase.js?v=20261008-1";
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut,
@@ -2430,7 +2434,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
-  collection, getDocs, getDocsFromServer
+  collection, getDocs, getDocsFromServer, runTransaction
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -3333,6 +3337,34 @@ async function normalizeFinishedInventoryByColorMaster(){
   }
 }
 
+let manufacturerEditorMounted = false;
+async function openManufacturerEditor(){
+  if(manufacturerEditorMounted || !masterReady || !isAllowedUser(auth.currentUser)) return;
+  const response = await fetch('./manufacturer-models.json?v=20261008-1');
+  if(!response.ok) throw Error('メーカー資料を読み込めません。');
+  const models = await response.json();
+  globalThis.IcelollyManufacturerColorEditor.mount({
+    panel: document.getElementById('manufacturer-color-editor'), models,
+    getMaster: () => masterDocument,
+    save: async input => {
+      if(!isAllowedUser(auth.currentUser)) throw Error('編集権限を確認してください。');
+      await runTransaction(db, async transaction => {
+        const current = await transaction.get(masterRef);
+        if(!current.exists()) throw Error('マスターを読み込めません。');
+        const patch = globalThis.IcelollyManufacturerColorEditor.plan(current.data(), input.baseline, input.rows, input.models, input.operationId, input.at);
+        if(patch) transaction.update(masterRef, patch);
+      });
+      const fresh = await getDocFromServer(masterRef);
+      masterDocument = fresh.data();
+      renderColorSettings();
+    }
+  });
+  manufacturerEditorMounted = true;
+}
+document.getElementById('manufacturer-color-editor').parentElement.addEventListener('toggle', e => {
+  if(e.currentTarget.open) openManufacturerEditor().catch(e => { document.getElementById('manufacturer-color-editor').textContent = e.message; });
+});
+
 function renderColorSettings(){
   const panel = document.getElementById('color-settings-panel');
   const list = document.getElementById('color-master-list');
@@ -3354,7 +3386,9 @@ function renderColorSettings(){
     warning.innerHTML = '';
   }
 
+  const manufacturerRows = globalThis.IcelollyManufacturerColors.list(masterDocument);
   list.innerHTML = colors.map(color => {
+    const manufacturer = manufacturerRows.filter(row => row.colorId === color.id).map(row => `${masterDocument.masters.bodies[row.bodyId]?.managementName || row.bodyId} / ${row.productCode} / ${row.officialName} (${row.colorCode})`).join("、");
     const usage = colorUsageBodyIds(color.id);
     const hasConflict = usage.length > 1;
     const options = [
@@ -3362,7 +3396,7 @@ function renderColorSettings(){
       ...bodies.map(body => `<option value="${escapeHtml(body.id)}" ${color.bodyId === body.id ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`)
     ].join('');
     return `<div class="color-master-row">
-      <input type="text" data-color-management="${escapeHtml(color.id)}" value="${escapeHtml(color.managementName || '')}" readonly>
+      <div><input type="text" data-color-management="${escapeHtml(color.id)}" value="${escapeHtml(color.managementName || '')}" readonly><small class="color-manufacturer" style="display:block;overflow-wrap:anywhere;margin-top:5px;color:var(--text-secondary)">${escapeHtml(manufacturer || "メーカー対応未確認")}</small></div>
       <input type="text" data-color-sales="${escapeHtml(color.id)}" value="${escapeHtml(color.pinkoiName || color.managementName || '')}" placeholder="販売用名称">
       <select data-color-body="${escapeHtml(color.id)}" data-color-conflict="${hasConflict ? '1' : '0'}">${options}</select>
     </div>`;
@@ -5541,6 +5575,14 @@ function resolvePurchaseMapping(product, supplierColor){
   const saved = purchaseSavedMappings()?.[key];
   const bodies = masterDocument?.masters?.bodies || {};
   const colors = masterDocument?.masters?.colors || {};
+  const shared = globalThis.IcelollyManufacturerPurchase.resolve(masterDocument, product, supplierColor, saved);
+  if(shared.state === 'blocked') return null;
+  if(shared.row){
+    const row = shared.row;
+    return { key, product: row.productCode, supplierColor: String(supplierColor).trim().toUpperCase(), supplierLabel: row.officialName,
+      bodyId: row.bodyId, bodyName: bodies[row.bodyId]?.managementName || row.bodyId,
+      colorId: row.colorId, colorName: colors[row.colorId]?.managementName || row.colorId, source: 'manufacturer_shared' };
+  }
   if(saved?.bodyId && saved?.colorId && bodies[saved.bodyId] && colors[saved.colorId]){
     return {
       key,
@@ -5563,6 +5605,7 @@ function resolvePurchaseMapping(product, supplierColor){
   const body = findMasterByManagementName(bodies, fallback.bodyName);
   const color = findMasterByManagementName(colors, fallback.colorName);
   if(!body || !color) return null;
+  if(globalThis.IcelollyManufacturerPurchase.resolve(masterDocument, product, supplierColor, {bodyId: body.id, colorId: color.id}).state === 'blocked') return null;
   return {
     key,
     product: fallback.product,
@@ -5689,8 +5732,13 @@ function purchaseColorOptions(selectedId = ''){
   return masterColors().map(color => `<option value="${escapeHtml(color.id)}" ${selectedId === color.id ? 'selected' : ''}>${escapeHtml(color.managementName || color.id)}</option>`).join('');
 }
 
+function purchaseSharedModelLocked(product){
+  return globalThis.IcelollyManufacturerColors.list(masterDocument).some(row => row.productCode === String(product || '').trim().toUpperCase());
+}
+
 async function savePurchaseColorMapping(unknown, colorId){
   if(!masterReady || !masterDocument || !unknown?.product || !unknown?.supplierColor || !colorId) return false;
+  if(purchaseSharedModelLocked(unknown.product)){ alert('この品番は共通メーカー対応で管理しています。Color設定の一括確認・編集で対応を確認してください。'); return false; }
   const bodyId = unknown.bodyId || suggestedBodyForPurchaseProduct(unknown.product)?.id || '';
   const color = masterDocument?.masters?.colors?.[colorId];
   if(!bodyId || !color){
@@ -5714,6 +5762,7 @@ async function savePurchaseColorMapping(unknown, colorId){
 
 async function createPurchaseColorAndMapping(unknown, managementName){
   if(!masterReady || !masterDocument) return false;
+  if(purchaseSharedModelLocked(unknown?.product)){ alert('この品番は共通メーカー対応で管理しています。既存のColorと正式カラーをColor設定で確認してください。新しい管理Colorは別途追加してから対応します。'); return false; }
   const name = String(managementName || '').trim();
   if(!name){
     alert('新しいColor名を入力してください。');
@@ -8723,6 +8772,3 @@ startAuthGate();
     next.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, true);
 })();
-</script>
-</body>
-</html>
