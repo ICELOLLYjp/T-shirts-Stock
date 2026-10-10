@@ -193,11 +193,14 @@ Task screen presentation:
 
 When completing an in-house stock-production task:
 
+- the task must have sufficient required physical material stock before it can complete;
 - blank Body stock decreases;
 - for Designs whose production method is `sheet`, required print sheet stock also decreases;
 - for `silkscreen` Designs, print-sheet stock is not displayed as a task requirement, does not limit producible quantity, and does not decrease on completion;
 - finished stock increases;
 - update source is recorded as production.
+
+After completion, the task is removed from `production_tasks` and remaining open tasks are recalculated against the new physical material stock. A missing order record is treated as zero ordered quantity; it never suppresses a shortage. Manual `発注済み` tracking is informational only.
 
 The production-task screen lazily reads the single `products/tshirt` document once per app session when needed to resolve Design production methods. It does not add per-task reads or listeners.
 
@@ -209,7 +212,19 @@ Do not merge these semantics with direct inventory entry.
 
 ### Production purchase checklist
 
-The 制作 screen contains a compact, collapsible `発注リスト` derived from current in-house task shortages.
+Each in-house production task card has a transient checkbox for material-order calculation.
+
+- checked task IDs are held only in memory; they are not written to Firestore;
+- the calculator aggregates only checked in-house tasks;
+- blank Body demand is grouped by Body × Color × Size;
+- sheet demand is grouped by Design and only applies when that Design production method is `sheet`;
+- silkscreen tasks calculate from blank Body stock only;
+- outsourced tasks are not selectable for material-order calculation;
+- each result shows task demand, current stock, recorded outstanding order quantity, required order quantity, and additional order quantity;
+- only numeric `blank_orders` / `sheet_orders` records reduce additional order quantity;
+- a manual `発注済み` check without a numeric order record is shown as a warning and is not subtracted from the calculation.
+
+The 制作 screen also contains a compact, collapsible `発注リスト` derived from current in-house task shortages.
 
 - Body shortage rows show which Design names are consuming that Body / Color / Size.
 - Print-sheet shortage rows are created only for Designs whose production method is `sheet`; silkscreen Designs never create sheet purchase rows.
