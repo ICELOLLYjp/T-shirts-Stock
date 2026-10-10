@@ -224,7 +224,13 @@ Each in-house production task card has a transient checkbox for material-order c
 - outsourced tasks are not selectable for material-order calculation;
 - each result shows task demand, current stock, recorded outstanding order quantity, required order quantity, and additional order quantity;
 - only numeric `blank_orders` / `sheet_orders` records reduce additional order quantity;
-- a manual `発注済み` check without a numeric order record is shown as a warning and is not subtracted from the calculation.
+- a manual `発注済み` check without a numeric order record is shown as a warning and is not subtracted from the calculation;
+- selected-task purchasing is processed per Design;
+- each selected Design has separate `Body 発注済み` and `シート 発注済み` actions;
+- these actions add only the current additional required quantity to `blank_orders` or `sheet_orders`, so already-recorded outstanding orders are not duplicated;
+- each action also appends a Design-linked record to `tshirtStock/master.production_purchase_records` with material type, selected task IDs, ordered items/parts, quantity, and timestamp;
+- Body orders remain shared physical stock in `blank_orders`, while the purchase record preserves which Design triggered that order;
+- silkscreen Designs have no sheet-order action because they do not consume print sheets.
 
 The 制作 screen also contains a compact, collapsible `発注リスト` derived from current in-house task shortages.
 
