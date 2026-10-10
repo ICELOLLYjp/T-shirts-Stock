@@ -888,6 +888,35 @@
     font-size: 13px;
     font-weight: 700;
   }
+  details.task-order-card { padding: 0; overflow: hidden; }
+  .task-order-card > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 44px;
+    padding: 10px 12px;
+    list-style: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .task-order-card > summary::-webkit-details-marker { display: none; }
+  .task-order-card > summary::after {
+    content: '▾';
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .task-order-card:not([open]) > summary::after { content: '›'; }
+  .task-order-summary-meta {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .task-order-body { padding: 0 12px 12px; }
   .task-shortage-section + .task-shortage-section { margin-top: 10px; }
   .task-shortage-heading {
     margin-bottom: 5px;
@@ -896,17 +925,38 @@
   }
   .task-shortage-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
     gap: 8px;
-    padding: 6px 0;
+    align-items: start;
+    padding: 8px 0;
     border-top: 1px solid var(--border);
     font-size: 12px;
   }
   .task-shortage-row:first-of-type { border-top: 0; }
+  .task-purchase-check {
+    width: 20px;
+    height: 20px;
+    margin: 1px 0 0;
+  }
+  .task-shortage-main { min-width: 0; }
+  .task-shortage-name {
+    display: block;
+    color: var(--text);
+    font-weight: 650;
+  }
+  .task-shortage-designs {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 1.35;
+  }
   .task-shortage-meta {
     color: var(--text-secondary);
     text-align: right;
     white-space: nowrap;
+    font-size: 10px;
+    line-height: 1.45;
   }
   .task-shortage-need { color: var(--danger); font-weight: 700; }
   .task-no-shortage {
@@ -2395,7 +2445,7 @@
 
 <section id="view-plan" class="view-panel" hidden>
   <div class="section-title">制作タスク</div>
-  <div class="section-note">Design・Body・Color・Sizeを自由に組み合わせてタスク登録します。自社制作は未プリントBodyとシート在庫から制作可能枚数を自動計算し、完了時に資材を減らして完成品在庫を増やします。外注は資材在庫を減らしません。</div>
+  <div class="section-note">Design・Body・Color・Sizeを自由に組み合わせてタスク登録します。自社制作はDesignの制作方法に合わせて必要資材を確認し、完了時に資材を減らして完成品在庫を増やします。シルクスクリーンは未プリントBodyのみ、シート印刷は未プリントBodyとシートを使用します。外注は資材在庫を減らしません。</div>
   <div id="production-summary"></div>
   <div id="task-order-list"></div>
   <div id="task-add-area"></div>
@@ -4926,46 +4976,148 @@ function sheetSubOrderQtyForTask(task){
   return sheetSubEnabled(task.designId) ? sheetOrderQty(task.designId, 'sub') : 0;
 }
 
+let taskProductionMethods = null;
+let taskProductionMethodsLoading = null;
+
+function taskDesignProductionMethod(designId){
+  const source = taskProductionMethods || (costMasterState?.loaded ? costMasterState.productionMethods : null) || {};
+  const method = source?.[designId];
+  return ['sheet','silkscreen','outsourced'].includes(method) ? method : 'sheet';
+}
+
+function taskDesignUsesSheets(designId){
+  return taskDesignProductionMethod(designId) === 'sheet';
+}
+
+async function ensureTaskProductionMethods(){
+  if(taskProductionMethods) return taskProductionMethods;
+  if(costMasterState?.loaded){
+    taskProductionMethods = { ...(costMasterState.productionMethods || {}) };
+    return taskProductionMethods;
+  }
+  if(taskProductionMethodsLoading) return await taskProductionMethodsLoading;
+  taskProductionMethodsLoading = getDoc(doc(db,'products','tshirt'))
+    .then(snap => {
+      taskProductionMethods = snap.exists() ? { ...(snap.data()?.productionMethods || {}) } : {};
+      return taskProductionMethods;
+    })
+    .catch(error => {
+      console.error('production method load failed for tasks', error);
+      taskProductionMethods = {};
+      return taskProductionMethods;
+    })
+    .finally(() => { taskProductionMethodsLoading = null; });
+  return await taskProductionMethodsLoading;
+}
+
+function productionPurchaseChecks(){
+  return masterDocument?.production_purchase_checks || {};
+}
+
+function productionPurchaseChecked(key){
+  return Boolean(key && productionPurchaseChecks()?.[key]?.ordered);
+}
+
+async function setProductionPurchaseChecked(key, checked, meta = {}){
+  if(!key || !masterReady || !masterDocument) return false;
+  const checks = structuredClone(productionPurchaseChecks());
+  if(checked){
+    checks[key] = { ...meta, ordered:true, updatedAt:nowIso() };
+  } else {
+    delete checks[key];
+  }
+  masterDocument = { ...masterDocument, production_purchase_checks:checks };
+  return (await saveMasterData({ production_purchase_checks:checks })) !== false;
+}
+
 function taskResourceSummary(){
   const rows = productionTaskRows();
   const inhouse = rows.filter(x => x.method === 'inhouse');
   const outsourced = rows.filter(x => x.method === 'outsourced');
   const bodyDemand = new Map();
+  const designDemand = new Map();
   const sheetDemand = new Map();
 
   inhouse.forEach(task => {
     const bkey = `${task.bodyId}|${task.colorId}|${task.sizeId}`;
     if(task.bodyId) bodyDemand.set(bkey, (bodyDemand.get(bkey) || 0) + task.qty);
-    sheetDemand.set(task.designId, (sheetDemand.get(task.designId) || 0) + task.qty);
+    designDemand.set(task.designId, (designDemand.get(task.designId) || 0) + task.qty);
+    if(taskDesignUsesSheets(task.designId)){
+      sheetDemand.set(task.designId, (sheetDemand.get(task.designId) || 0) + task.qty);
+    }
   });
 
   const bodyShortages = [];
   bodyDemand.forEach((needed, key) => {
     const [bodyId, colorId, sizeId] = key.split('|');
-    const sample = inhouse.find(t => t.bodyId === bodyId && t.colorId === colorId && t.sizeId === sizeId);
+    const related = inhouse.filter(t => t.bodyId === bodyId && t.colorId === colorId && t.sizeId === sizeId);
+    const sample = related[0];
     const stock = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
     const ordered = Math.max(0, Number(masterDocument?.blank_orders?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
     const shortage = Math.max(0, needed - stock);
-    if(shortage > 0) bodyShortages.push({ ...sample, needed, stock, ordered, shortage, additionalOrder: Math.max(0, shortage - ordered) });
+    if(shortage > 0){
+      const designNames = [...new Set(related.map(t => t.designName))];
+      const taskFingerprint = related.map(t => `${t.id}:${t.qty}`).sort().join('|');
+      const purchaseKey = stableId('purchase_body', `${key}|${taskFingerprint}`);
+      bodyShortages.push({
+        ...sample,
+        needed,
+        stock,
+        ordered,
+        shortage,
+        additionalOrder: Math.max(0, shortage - ordered),
+        designNames,
+        purchaseKey,
+        purchaseType:'body'
+      });
+    }
   });
 
   const sheetShortages = [];
   sheetDemand.forEach((needed, designId) => {
-    const sample = inhouse.find(t => t.designId === designId);
+    const related = inhouse.filter(t => t.designId === designId && taskDesignUsesSheets(t.designId));
+    const sample = related[0];
+    const taskFingerprint = related.map(t => `${t.id}:${t.qty}`).sort().join('|');
     const mainStock = sheetStockQty(designId, 'main');
     const mainOrdered = sheetOrderQty(designId, 'main');
     const mainShortage = Math.max(0, needed - mainStock);
-    if(mainShortage > 0) sheetShortages.push({ ...sample, sheetPart: 'メイン', needed, stock: mainStock, ordered: mainOrdered, shortage: mainShortage, additionalOrder: Math.max(0, mainShortage - mainOrdered) });
+    if(mainShortage > 0){
+      sheetShortages.push({
+        ...sample,
+        sheetPart:'メイン',
+        sheetPartId:'main',
+        needed,
+        stock:mainStock,
+        ordered:mainOrdered,
+        shortage:mainShortage,
+        additionalOrder:Math.max(0, mainShortage-mainOrdered),
+        purchaseKey:stableId('purchase_sheet', `${designId}|main|${taskFingerprint}`),
+        purchaseType:'sheet'
+      });
+    }
     if(sheetSubEnabled(designId)){
       const subStock = sheetStockQty(designId, 'sub');
       const subOrdered = sheetOrderQty(designId, 'sub');
       const subShortage = Math.max(0, needed - subStock);
-      if(subShortage > 0) sheetShortages.push({ ...sample, sheetPart: 'サブ', needed, stock: subStock, ordered: subOrdered, shortage: subShortage, additionalOrder: Math.max(0, subShortage - subOrdered) });
+      if(subShortage > 0){
+        sheetShortages.push({
+          ...sample,
+          sheetPart:'サブ',
+          sheetPartId:'sub',
+          needed,
+          stock:subStock,
+          ordered:subOrdered,
+          shortage:subShortage,
+          additionalOrder:Math.max(0, subShortage-subOrdered),
+          purchaseKey:stableId('purchase_sheet', `${designId}|sub|${taskFingerprint}`),
+          purchaseType:'sheet'
+        });
+      }
     }
   });
 
-  // Body と Design ごとのシート在庫を同時に満たせる制作枚数を計算する。
-  // サブシートありのDesignは、メインとサブの少ない方を実効シート在庫とする。
+  // Body在庫と、シート印刷Designだけはシート在庫を同時に満たせる制作枚数を計算する。
+  // シルクスクリーンはBody在庫のみを制作可能数の制約にする。
   const capacities = new Map();
   const adj = new Map();
   const addEdge = (u,v,c) => {
@@ -4986,11 +5138,17 @@ function taskResourceSummary(){
     const key = `${task.bodyId}|${task.colorId}|${task.sizeId}`;
     addEdge(`b:${key}`, `d:${task.designId}`, task.qty);
   });
-  sheetDemand.forEach((needed, designId) => {
-    const mainStock = sheetStockQty(designId, 'main');
-    const effectiveStock = sheetSubEnabled(designId) ? Math.min(mainStock, sheetStockQty(designId, 'sub')) : mainStock;
+  designDemand.forEach((needed, designId) => {
+    let effectiveStock = needed;
+    if(taskDesignUsesSheets(designId)){
+      const mainStock = sheetStockQty(designId, 'main');
+      effectiveStock = sheetSubEnabled(designId)
+        ? Math.min(mainStock, sheetStockQty(designId, 'sub'))
+        : mainStock;
+    }
     addEdge(`d:${designId}`, sink, Math.min(needed, effectiveStock));
   });
+
   let maxFlow = 0;
   while(true){
     const parent = new Map([[source, null]]);
@@ -5006,7 +5164,8 @@ function taskResourceSummary(){
     if(!parent.has(sink)) break;
     let flow = Infinity;
     for(let v=sink; v!==source; v=parent.get(v)){
-      const u=parent.get(v); flow=Math.min(flow, capacities.get(`${u}\u241f${v}`) || 0);
+      const u=parent.get(v);
+      flow=Math.min(flow, capacities.get(`${u}\u241f${v}`) || 0);
     }
     for(let v=sink; v!==source; v=parent.get(v)){
       const u=parent.get(v);
@@ -5161,28 +5320,33 @@ async function completeProductionTask(taskIdValue){
   }
   const inhouse = task.method === 'inhouse';
   const isOrder = task.purpose === 'order';
+  const usesSheets = inhouse && taskDesignUsesSheets(task.designId);
   const blankQty = blankQtyForTask(task);
-  const mainSheetQty = sheetQtyForTask(task);
-  const needsSub = sheetSubEnabled(task.designId);
+  const mainSheetQty = usesSheets ? sheetQtyForTask(task) : Infinity;
+  const needsSub = usesSheets && sheetSubEnabled(task.designId);
   const subSheetQty = needsSub ? sheetStockQty(task.designId, 'sub') : Infinity;
-  if(inhouse && (blankQty < task.qty || mainSheetQty < task.qty || subSheetQty < task.qty)){
-    const subText = needsSub ? ` / サブシート ${subSheetQty}枚` : '';
-    alert(`資材が不足しています。
-Body在庫 ${blankQty}枚 / メインシート ${mainSheetQty}枚${subText} / タスク ${task.qty}枚`);
+
+  if(inhouse && (blankQty < task.qty || (usesSheets && (mainSheetQty < task.qty || subSheetQty < task.qty)))){
+    const materialText = usesSheets
+      ? `Body在庫 ${blankQty}枚 / メインシート ${mainSheetQty}枚${needsSub ? ` / サブシート ${subSheetQty}枚` : ''} / タスク ${task.qty}枚`
+      : `Body在庫 ${blankQty}枚 / タスク ${task.qty}枚`;
+    alert(`資材が不足しています。\n${materialText}`);
     return false;
   }
+
   const label = `${task.designName} / ${task.colorName} / ${task.sizeName} × ${task.qty}`;
   const methodLabel = inhouse ? '自社制作' : '外注';
   const purposeLabel = isOrder ? 'オーダー品' : '在庫用';
-  const sheetText = needsSub ? '未プリントBody・メインシート・サブシート在庫を同数減らします。' : '未プリントBodyとシート在庫を同数減らします。';
   const finishedText = isOrder
     ? 'オーダー品のため、完成品在庫には追加しません。'
     : `完成品在庫を ${task.qty}枚 増やします。`;
-  const materialText = inhouse ? sheetText : '未プリントBodyとシート在庫は減らしません。';
-  if(!confirm(`${label}
-${methodLabel} / ${purposeLabel} のタスクを完了しますか？
-${finishedText}
-${materialText}`)) return false;
+  const materialText = !inhouse
+    ? '資材在庫は減らしません。'
+    : usesSheets
+      ? (needsSub ? '未プリントBody・メインシート・サブシート在庫を同数減らします。' : '未プリントBodyとシート在庫を同数減らします。')
+      : '未プリントBody在庫を同数減らします。';
+
+  if(!confirm(`${label}\n${methodLabel} / ${purposeLabel} のタスクを完了しますか？\n${finishedText}\n${materialText}`)) return false;
 
   let blank = structuredClone(masterDocument?.blank_stock || {});
   let sheets = structuredClone(masterDocument?.print_sheets || {});
@@ -5191,16 +5355,18 @@ ${materialText}`)) return false;
 
   if(inhouse){
     blank = setNestedQty(blank, task.bodyId, task.colorId, task.sizeId, blankQty - task.qty);
-    const item = { ...(sheets[task.designId] || {}) };
-    const nextMain = mainSheetQty - task.qty;
-    if(nextMain > 0) item.qty = nextMain; else delete item.qty;
-    if(needsSub){
-      const nextSub = subSheetQty - task.qty;
-      if(nextSub > 0) item.subQty = nextSub; else delete item.subQty;
+    if(usesSheets){
+      const item = { ...(sheets[task.designId] || {}) };
+      const nextMain = mainSheetQty - task.qty;
+      if(nextMain > 0) item.qty = nextMain; else delete item.qty;
+      if(needsSub){
+        const nextSub = subSheetQty - task.qty;
+        if(nextSub > 0) item.subQty = nextSub; else delete item.subQty;
+      }
+      item.updatedAt = nowIso();
+      if(Math.max(0, Number(item.qty || 0)) > 0 || Math.max(0, Number(item.subQty || 0)) > 0) sheets[task.designId] = item;
+      else delete sheets[task.designId];
     }
-    item.updatedAt = nowIso();
-    if(Math.max(0, Number(item.qty || 0)) > 0 || Math.max(0, Number(item.subQty || 0)) > 0) sheets[task.designId] = item;
-    else delete sheets[task.designId];
   }
 
   let inventoryColorMeta = structuredClone(masterDocument?.inventory_color_meta || {});
@@ -5212,7 +5378,9 @@ ${materialText}`)) return false;
   delete tasks[task.id];
 
   masterDocument = { ...masterDocument, blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta, production_tasks: tasks, productionTasksVersion: 1 };
-  const saved = await saveMasterData({ blank_stock: blank, print_sheets: sheets, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta, production_tasks: tasks, productionTasksVersion: 1 });
+  const fields = { blank_stock: blank, inventory_v2: inventory, inventory_color_meta: inventoryColorMeta, production_tasks: tasks, productionTasksVersion: 1 };
+  if(usesSheets) fields.print_sheets = sheets;
+  const saved = await saveMasterData(fields);
   if(saved === false) return false;
   if(!isOrder) await syncSharedFromMaster();
   renderCurrentView();
@@ -5236,6 +5404,16 @@ function renderProductionTasks(){
     ensureProductionTasks().then(() => renderProductionTasks());
     return;
   }
+  if(!taskProductionMethods){
+    summaryBox.innerHTML = '<div class="task-empty">Designの制作方法を確認しています…</div>';
+    orderBox.innerHTML = '';
+    addBox.innerHTML = '';
+    listBox.innerHTML = '';
+    ensureTaskProductionMethods().then(() => {
+      if(state.activeView === 'plan') renderProductionTasks();
+    });
+    return;
+  }
 
   const res = taskResourceSummary();
   summaryBox.innerHTML = `<div class="task-summary-grid">
@@ -5245,11 +5423,50 @@ function renderProductionTasks(){
     <div class="task-stat"><span class="task-stat-label">外注</span><strong>${res.outsourcedTotal}</strong> 枚</div>
   </div>`;
 
-  const bodyRows = res.bodyShortages.map(x => `<div class="task-shortage-row"><span>${escapeHtml(x.bodyName)} / ${escapeHtml(x.colorName)} / ${escapeHtml(x.sizeName)}</span><span class="task-shortage-meta">必要 ${x.needed} / 在庫 ${x.stock} / <span class="task-shortage-need">不足 ${x.shortage}</span>${x.ordered ? ` / 発注済 ${x.ordered}` : ''}${x.additionalOrder ? ` / 追加発注 ${x.additionalOrder}` : ''}</span></div>`).join('');
-  const sheetRows = res.sheetShortages.map(x => `<div class="task-shortage-row"><span>${escapeHtml(x.designName)} / ${escapeHtml(x.sheetPart || 'メイン')}シート</span><span class="task-shortage-meta">必要 ${x.needed} / 在庫 ${x.stock} / <span class="task-shortage-need">不足 ${x.shortage}</span>${x.ordered ? ` / 発注済 ${x.ordered}` : ''}${x.additionalOrder ? ` / 追加発注 ${x.additionalOrder}` : ''}</span></div>`).join('');
-  orderBox.innerHTML = `<div class="task-order-card"><div class="task-order-title">発注リスト</div>
-    ${bodyRows || sheetRows ? `${bodyRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">未プリントBody</div>${bodyRows}</div>` : ''}${sheetRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">プリントシート</div>${sheetRows}</div>` : ''}` : '<div class="task-no-shortage">現在のタスクに対する資材不足はありません。</div>'}
-  </div>`;
+  const purchaseItems = [...res.bodyShortages, ...res.sheetShortages];
+  const purchaseLookup = new Map(purchaseItems.map(item => [item.purchaseKey,item]));
+  const checkedCount = purchaseItems.filter(item => productionPurchaseChecked(item.purchaseKey)).length;
+  const uncheckedCount = Math.max(0, purchaseItems.length - checkedCount);
+  const bodyRows = res.bodyShortages.map(x => {
+    const checked = productionPurchaseChecked(x.purchaseKey);
+    const designText = x.designNames?.length ? `Design: ${x.designNames.join(' / ')}` : `Design: ${x.designName || '未設定'}`;
+    const orderQty = x.ordered ? ` / 発注数 ${x.ordered}` : '';
+    const additional = x.additionalOrder ? ` / 追加必要 ${x.additionalOrder}` : '';
+    return `<div class="task-shortage-row">
+      <input class="task-purchase-check" type="checkbox" data-purchase-check="${escapeHtml(x.purchaseKey)}" ${checked?'checked':''} aria-label="発注済み">
+      <div class="task-shortage-main"><span class="task-shortage-name">${escapeHtml(x.bodyName)} / ${escapeHtml(x.colorName)} / ${escapeHtml(x.sizeName)}</span><span class="task-shortage-designs">${escapeHtml(designText)}</span></div>
+      <span class="task-shortage-meta">必要 ${x.needed} / 在庫 ${x.stock}<br><span class="task-shortage-need">不足 ${x.shortage}</span>${orderQty}${additional}</span>
+    </div>`;
+  }).join('');
+  const sheetRows = res.sheetShortages.map(x => {
+    const checked = productionPurchaseChecked(x.purchaseKey);
+    const orderQty = x.ordered ? ` / 発注数 ${x.ordered}` : '';
+    const additional = x.additionalOrder ? ` / 追加必要 ${x.additionalOrder}` : '';
+    return `<div class="task-shortage-row">
+      <input class="task-purchase-check" type="checkbox" data-purchase-check="${escapeHtml(x.purchaseKey)}" ${checked?'checked':''} aria-label="発注済み">
+      <div class="task-shortage-main"><span class="task-shortage-name">${escapeHtml(x.designName)} / ${escapeHtml(x.sheetPart || 'メイン')}シート</span><span class="task-shortage-designs">Design: ${escapeHtml(x.designName)}</span></div>
+      <span class="task-shortage-meta">必要 ${x.needed} / 在庫 ${x.stock}<br><span class="task-shortage-need">不足 ${x.shortage}</span>${orderQty}${additional}</span>
+    </div>`;
+  }).join('');
+  orderBox.innerHTML = `<details class="task-order-card" data-disclosure-key="production-purchase-list">
+    <summary><span>発注リスト</span><span class="task-order-summary-meta">${purchaseItems.length ? `未チェック ${uncheckedCount} / ${purchaseItems.length}件` : '0件'}</span></summary>
+    <div class="task-order-body">
+      ${bodyRows || sheetRows ? `${bodyRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">未プリントBody</div>${bodyRows}</div>` : ''}${sheetRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">プリントシート</div>${sheetRows}</div>` : ''}` : '<div class="task-no-shortage">現在のタスクに対する資材不足はありません。</div>'}
+    </div>
+  </details>`;
+  orderBox.querySelectorAll('input[data-purchase-check]').forEach(input => input.addEventListener('change', async () => {
+    const key = input.getAttribute('data-purchase-check') || '';
+    const item = purchaseLookup.get(key);
+    if(!item) return;
+    input.disabled = true;
+    const meta = item.purchaseType === 'body'
+      ? { type:'body', bodyId:item.bodyId, colorId:item.colorId, sizeId:item.sizeId, designIds:(item.designNames || []), shortage:item.shortage }
+      : { type:'sheet', designId:item.designId, part:item.sheetPartId || 'main', shortage:item.shortage };
+    const saved = await setProductionPurchaseChecked(key, input.checked, meta);
+    if(saved === false) input.checked = !input.checked;
+    renderProductionTasks();
+  }));
+  applyDisclosureState(orderBox);
 
   const designs = masterDesigns();
   const colors = masterColors();
@@ -5302,10 +5519,13 @@ function renderProductionTasks(){
     const designId = designSelect?.value || defaultDesign;
     const bodyId = bodySelect?.value || defaultBody;
     const outsourced = methodSelect?.value === 'outsourced';
-    const mainSheetQty = sheetStockQty(designId, 'main');
-    const needsSub = sheetSubEnabled(designId);
+    const designMethod = taskDesignProductionMethod(designId);
+    const usesSheets = !outsourced && designMethod === 'sheet';
+    const mainSheetQty = usesSheets ? sheetStockQty(designId, 'main') : Infinity;
+    const needsSub = usesSheets && sheetSubEnabled(designId);
     const subSheetQty = needsSub ? sheetStockQty(designId, 'sub') : Infinity;
-    const effectiveSheetQty = needsSub ? Math.min(mainSheetQty, subSheetQty) : mainSheetQty;
+    const effectiveSheetQty = usesSheets ? (needsSub ? Math.min(mainSheetQty, subSheetQty) : mainSheetQty) : Infinity;
+
     sizes.forEach(size => {
       const el = addBox.querySelector(`[data-task-capacity-size="${CSS.escape(size.id)}"]`);
       if(!el) return;
@@ -5314,15 +5534,23 @@ function renderProductionTasks(){
         el.textContent = `完成品 ${finishedQty} / 外注`;
       } else {
         const bodyQty = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[size.id]?.qty || 0));
-        el.textContent = `完成品 ${finishedQty} / Body ${bodyQty} / 制作可 ${Math.min(bodyQty, effectiveSheetQty)}`;
+        const producible = usesSheets ? Math.min(bodyQty, effectiveSheetQty) : bodyQty;
+        el.textContent = `完成品 ${finishedQty} / Body ${bodyQty} / 制作可 ${producible}`;
       }
     });
+
     const orderNote = purposeSelect?.value === 'order' ? ' オーダー品は完了後、完成品在庫へ追加しません。' : '';
-    capacityLabel.textContent = (outsourced
-      ? '外注はBody・シート在庫を使用しません'
-      : (needsSub
+    if(outsourced){
+      capacityLabel.textContent = '外注は資材在庫を使用しません。' + orderNote;
+    } else if(usesSheets){
+      capacityLabel.textContent = (needsSub
         ? `メイン ${mainSheetQty}枚 / サブ ${subSheetQty}枚。両方1枚ずつ使うため、少ない方を基準に制作可能数を計算します。`
-        : `シート在庫 ${mainSheetQty}枚。各サイズのBody在庫と照合して制作可能数を表示しています。`)) + orderNote;
+        : `シート在庫 ${mainSheetQty}枚。各サイズのBody在庫と照合して制作可能数を表示しています。`) + orderNote;
+    } else if(designMethod === 'silkscreen'){
+      capacityLabel.textContent = 'シルクスクリーン：各サイズのBody在庫を基準に制作可能数を表示しています。' + orderNote;
+    } else {
+      capacityLabel.textContent = 'このDesignは外注設定です。自社制作を選んだ場合はBody在庫を基準に表示します。' + orderNote;
+    }
   };
   const refreshTaskCombos = () => {
     populatePreferredVariantSelects(designSelect.value,bodySelect,colorSelect,Boolean(showAllCombos?.checked));
@@ -5378,18 +5606,29 @@ function renderProductionTasks(){
     let previousTaskDesign = '';
     return taskRows.length ? `<div class="task-list">${taskRows.map(task => {
     const bodyStock = blankQtyForTask(task);
-    const mainSheetStock = sheetQtyForTask(task);
-    const needsSub = sheetSubEnabled(task.designId);
+    const designMethod = taskDesignProductionMethod(task.designId);
+    const usesSheets = task.method === 'inhouse' && designMethod === 'sheet';
+    const mainSheetStock = usesSheets ? sheetQtyForTask(task) : Infinity;
+    const needsSub = usesSheets && sheetSubEnabled(task.designId);
     const subSheetStock = needsSub ? sheetStockQty(task.designId, 'sub') : Infinity;
-    const effectiveSheetStock = needsSub ? Math.min(mainSheetStock, subSheetStock) : mainSheetStock;
-    const canSingle = task.method === 'outsourced' ? task.qty : Math.min(task.qty, bodyStock, effectiveSheetStock);
-    const canComplete = task.method === 'outsourced' || (task.bodyId && bodyStock >= task.qty && mainSheetStock >= task.qty && subSheetStock >= task.qty);
+    const effectiveSheetStock = usesSheets ? (needsSub ? Math.min(mainSheetStock, subSheetStock) : mainSheetStock) : Infinity;
+    const canSingle = task.method === 'outsourced'
+      ? task.qty
+      : Math.min(task.qty, bodyStock, effectiveSheetStock);
+    const canComplete = task.method === 'outsourced'
+      || (task.bodyId && bodyStock >= task.qty && (!usesSheets || (mainSheetStock >= task.qty && subSheetStock >= task.qty)));
     const orderText = task.purpose === 'order' ? ' オーダー品のため、完了後は完成品在庫に追加しません。' : '';
-    const resourceText = (task.method === 'outsourced'
-      ? '外注のため、完了しても未プリントBody・シート在庫は減りません。'
-      : (needsSub
+    let resourceText = '';
+    if(task.method === 'outsourced'){
+      resourceText = '外注のため、完了しても資材在庫は減りません。';
+    } else if(usesSheets){
+      resourceText = needsSub
         ? `Body在庫 ${bodyStock}枚 / メイン ${mainSheetStock}枚 / サブ ${subSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`
-        : `Body在庫 ${bodyStock}枚 / シート在庫 ${mainSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`)) + orderText;
+        : `Body在庫 ${bodyStock}枚 / シート在庫 ${mainSheetStock}枚 / このタスクは今 ${canSingle}枚 制作可能`;
+    } else {
+      resourceText = `Body在庫 ${bodyStock}枚 / このタスクは今 ${canSingle}枚 制作可能`;
+    }
+    resourceText += orderText;
     const designHeading = previousTaskDesign !== task.designId
       ? `<div class="task-design-heading">${escapeHtml(task.designName)}</div>` : '';
     previousTaskDesign = task.designId;
@@ -7010,6 +7249,7 @@ async function saveProductionMethod(designId,method){
   const next={...(costMasterState.productionMethods || {})};
   next[designId]=allowed.includes(method) ? method : 'sheet';
   costMasterState.productionMethods=next;
+  taskProductionMethods={...next};
   await setDoc(doc(db,'products','tshirt'), {
     productionMethods:next,
     productionMethodsUpdatedAt:serverTimestamp(),
