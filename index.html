@@ -5460,7 +5460,7 @@ function renderProductionTasks(){
     if(!item) return;
     input.disabled = true;
     const meta = item.purchaseType === 'body'
-      ? { type:'body', bodyId:item.bodyId, colorId:item.colorId, sizeId:item.sizeId, designIds:(item.designNames || []), shortage:item.shortage }
+      ? { type:'body', bodyId:item.bodyId, colorId:item.colorId, sizeId:item.sizeId, designNames:(item.designNames || []), shortage:item.shortage }
       : { type:'sheet', designId:item.designId, part:item.sheetPartId || 'main', shortage:item.shortage };
     const saved = await setProductionPurchaseChecked(key, input.checked, meta);
     if(saved === false) input.checked = !input.checked;
@@ -7249,7 +7249,6 @@ async function saveProductionMethod(designId,method){
   const next={...(costMasterState.productionMethods || {})};
   next[designId]=allowed.includes(method) ? method : 'sheet';
   costMasterState.productionMethods=next;
-  taskProductionMethods={...next};
   await setDoc(doc(db,'products','tshirt'), {
     productionMethods:next,
     productionMethodsUpdatedAt:serverTimestamp(),
@@ -7260,6 +7259,7 @@ async function saveProductionMethod(designId,method){
     },
     updatedAt:serverTimestamp()
   }, {merge:true});
+  taskProductionMethods={...next};
 }
 async function savePlateCostEvent(){
   const designId=costMasterState.plateSelection.designId;
@@ -7325,7 +7325,7 @@ function renderBodyCostSection(){
 function renderProductionMethodSection(){
   const box=document.getElementById('cost-production-method-app'); if(!box) return;
   const designs=masterDesigns();
-  box.innerHTML=`<details class="cost-section" open data-disclosure-key="cost-production-methods"><summary class="cost-section-title">Designごとの制作方法</summary><div class="cost-section-note" style="margin-top:8px;">シート印刷、シルクスクリーン、外注を指定します。Designマスター自体は変更せず、原価用設定として保存します。</div>${designs.map(d=>{const method=costMasterState.productionMethods?.[d.id]||'sheet';return `<div class="cost-method-row"><div class="cost-method-name">${escapeHtml(d.managementName||d.id)}</div><select class="cost-select" data-cost-method="${escapeHtml(d.id)}"><option value="sheet" ${method==='sheet'?'selected':''}>シート印刷</option><option value="silkscreen" ${method==='silkscreen'?'selected':''}>シルクスクリーン</option><option value="outsourced" ${method==='outsourced'?'selected':''}>外注</option></select></div>`;}).join('')}</details>`;
+  box.innerHTML=`<details class="cost-section" open data-disclosure-key="cost-production-methods"><summary class="cost-section-title">Designごとの制作方法</summary><div class="cost-section-note" style="margin-top:8px;">シート印刷、シルクスクリーン、外注を指定します。原価計算と制作タスクの資材判定に使用し、シルクスクリーンではシート在庫を使用しません。</div>${designs.map(d=>{const method=costMasterState.productionMethods?.[d.id]||'sheet';return `<div class="cost-method-row"><div class="cost-method-name">${escapeHtml(d.managementName||d.id)}</div><select class="cost-select" data-cost-method="${escapeHtml(d.id)}"><option value="sheet" ${method==='sheet'?'selected':''}>シート印刷</option><option value="silkscreen" ${method==='silkscreen'?'selected':''}>シルクスクリーン</option><option value="outsourced" ${method==='outsourced'?'selected':''}>外注</option></select></div>`;}).join('')}</details>`;
   box.querySelectorAll('select[data-cost-method]').forEach(sel=>sel.addEventListener('change',async()=>{sel.disabled=true;try{await saveProductionMethod(sel.getAttribute('data-cost-method'),sel.value);sel.disabled=false;}catch(e){alert(`制作方法を保存できませんでした。${e.message||e}`);sel.disabled=false;}}));
   applyDisclosureState(box);
 }
