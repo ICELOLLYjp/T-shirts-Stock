@@ -5451,6 +5451,7 @@ function renderProductionTasks(){
   orderBox.innerHTML = `<details class="task-order-card" data-disclosure-key="production-purchase-list">
     <summary><span>発注リスト</span><span class="task-order-summary-meta">${purchaseItems.length ? `未チェック ${uncheckedCount} / ${purchaseItems.length}件` : '0件'}</span></summary>
     <div class="task-order-body">
+      ${bodyRows || sheetRows ? '<div class="task-shortage-heading">発注したら左のチェックをオンにしてください。</div>' : ''}
       ${bodyRows || sheetRows ? `${bodyRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">未プリントBody</div>${bodyRows}</div>` : ''}${sheetRows ? `<div class="task-shortage-section"><div class="task-shortage-heading">プリントシート</div>${sheetRows}</div>` : ''}` : '<div class="task-no-shortage">現在のタスクに対する資材不足はありません。</div>'}
     </div>
   </details>`;
