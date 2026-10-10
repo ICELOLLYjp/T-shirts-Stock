@@ -274,6 +274,14 @@ Fields include:
 
 These represent material stock and ordering separately from finished inventory.
 
+Blank-stock screen behavior:
+
+- the selected Body shows only Colors whose Color-master `bodyId` matches that Body;
+- finished-stock and production-task exception Body × Color combinations remain separate behavior; this filtering applies specifically to the blank-stock screen;
+- existing mismatched legacy blank stock/order data is not deleted, but is excluded from the normal table and surfaced as a warning;
+- blank stock +/- controls, blank order quantity changes, receipt-selection changes, and receipt completion update the existing table cells/summary in place rather than rerendering the entire blank-stock table;
+- this local-update rule is intentional to keep the iPhone scroll position stable.
+
 ### Print sheets
 
 Fields include:
