@@ -1981,7 +1981,9 @@
   .order-ems-detail pre { margin:0; padding:10px; border:1px solid var(--border); border-radius:9px; overflow-wrap:anywhere; white-space:pre-wrap; font-size:13px; line-height:1.5; background:var(--bg); }
   .order-ems-detail button { min-height:42px; border:1px solid var(--accent); border-radius:9px; background:var(--accent-bg); color:var(--accent); font-weight:700; }
   .order-copy-status { font-size:12px; color:var(--text-secondary); }
-  .task-design-heading { margin:16px 0 7px; padding:10px 12px; border-radius:9px; background:var(--accent-bg); color:var(--accent); font-size:16px; font-weight:700; }
+  .task-design-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:16px 0 7px; padding:10px 12px; border-radius:9px; background:var(--accent-bg); color:var(--accent); font-size:16px; font-weight:700; }
+  .task-design-select-all { display:flex; align-items:center; gap:5px; flex-shrink:0; font-size:11px; font-weight:650; color:var(--accent); cursor:pointer; }
+  .task-design-select-all input { width:20px; height:20px; margin:0; flex-shrink:0; }
   @media (min-width:700px) { .main-nav { grid-template-columns:repeat(6,minmax(0,1fr)); } .design-picker-options { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 
   /* ICELOLLY stock-first neutral theme. */
@@ -5761,28 +5763,33 @@ function renderProductionTasks(){
   });
 
   const rows = res.rows;
-  const selectionSummary = selectedTaskPurchaseSummary(rows);
-  const currentBodyShortageByKey = new Map(res.bodyShortages.map(row => [`${row.bodyId}|${row.colorId}|${row.sizeId}`,row]));
-  const currentSheetShortageByKey = new Map(res.sheetShortages.map(row => [`${row.designId}|${row.sheetPartId || 'main'}`,row]));
-
-  const selectionOrderHtml = (() => {
+  const buildSelectionOrderHtml = () => {
+    const selectionSummary = selectedTaskPurchaseSummary(rows);
     if(!selectionSummary.selected.length) return '';
+
+    const currentRes = taskResourceSummary();
+    const currentBodyShortageByKey = new Map(currentRes.bodyShortages.map(row => [`${row.bodyId}|${row.colorId}|${row.sizeId}`,row]));
+    const currentSheetShortageByKey = new Map(currentRes.sheetShortages.map(row => [`${row.designId}|${row.sheetPartId || 'main'}`,row]));
     const bodyNeeds = selectionSummary.bodyRows.filter(row=>row.requiredOrder>0);
     const sheetNeeds = selectionSummary.sheetRows.filter(row=>row.requiredOrder>0);
+
     const bodyHtml = bodyNeeds.map(row => {
       const current = currentBodyShortageByKey.get(`${row.bodyId}|${row.colorId}|${row.sizeId}`);
       const checkedWithoutQty = Boolean(current && productionPurchaseChecked(current.purchaseKey) && row.ordered <= 0);
       const designs = row.designNames?.length ? ` · ${row.designNames.join(' / ')}` : '';
       return `<div class="task-selected-order-row"><span class="task-selected-order-name">${escapeHtml(row.bodyName)} / ${escapeHtml(row.colorName)} / ${escapeHtml(row.sizeName)}<small style="display:block;font-weight:400;color:var(--text-secondary);">${escapeHtml(designs.replace(/^ · /,''))}</small></span><span class="task-selected-order-meta">必要 ${row.needed} / 在庫 ${row.stock}<br>必要発注 <span class="task-selected-order-need">${row.requiredOrder}</span> / 発注中 ${row.ordered} / 追加 ${row.additionalOrder}${checkedWithoutQty?'<span class="task-selected-order-warning">発注済みチェックあり・数量未記録</span>':''}</span></div>`;
     }).join('');
+
     const sheetHtml = sheetNeeds.map(row => {
       const current = currentSheetShortageByKey.get(`${row.designId}|${row.sheetPartId || 'main'}`);
       const checkedWithoutQty = Boolean(current && productionPurchaseChecked(current.purchaseKey) && row.ordered <= 0);
       return `<div class="task-selected-order-row"><span class="task-selected-order-name">${escapeHtml(row.designName)} / ${escapeHtml(row.sheetPart)}シート</span><span class="task-selected-order-meta">必要 ${row.needed} / 在庫 ${row.stock}<br>必要発注 <span class="task-selected-order-need">${row.requiredOrder}</span> / 発注中 ${row.ordered} / 追加 ${row.additionalOrder}${checkedWithoutQty?'<span class="task-selected-order-warning">発注済みチェックあり・数量未記録</span>':''}</span></div>`;
     }).join('');
+
     const noNeed = !bodyNeeds.length && !sheetNeeds.length
       ? '<div class="task-no-shortage">選択したタスクは現在庫で制作できます。追加発注は不要です。</div>'
       : '';
+
     return `<div class="task-selected-order-card">
       <div class="task-selected-order-head"><strong>チェックしたタスクの必要発注</strong><button id="task-material-selection-clear" class="task-selected-order-clear" type="button">選択解除</button></div>
       <div class="task-selected-order-note">選択した自社制作タスクだけで計算します。発注中数量は記録済みの blank_orders / sheet_orders だけを差し引きます。「発注済み」チェックだけでは数量を差し引きません。</div>
@@ -5790,7 +5797,9 @@ function renderProductionTasks(){
       ${sheetHtml?`<div class="task-selected-order-section"><div class="task-selected-order-heading">プリントシート</div>${sheetHtml}</div>`:''}
       ${noNeed}
     </div>`;
-  })();
+  };
+
+  const selectionOrderHtml = buildSelectionOrderHtml();
 
   const inhouseRows = rows.filter(task => task.method === 'inhouse');
   const outsourcedRows = rows.filter(task => task.method === 'outsourced');
@@ -5822,7 +5831,7 @@ function renderProductionTasks(){
     }
     resourceText += orderText;
     const designHeading = previousTaskDesign !== task.designId
-      ? `<div class="task-design-heading">${escapeHtml(task.designName)}</div>` : '';
+      ? `<div class="task-design-heading"><span>${escapeHtml(task.designName)}</span>${task.method==='inhouse'?`<label class="task-design-select-all"><input type="checkbox" data-task-design-material-select="${escapeHtml(task.designId)}" aria-label="${escapeHtml(`${task.designName} のタスクをすべて発注計算に含める`)}">すべて</label>`:''}</div>` : '';
     previousTaskDesign = task.designId;
     return `${designHeading}<div class="task-card" data-task-card="${escapeHtml(task.id)}"><div class="task-card-head"><div class="task-card-head-main">${task.method==='inhouse'?`<input class="task-material-select" type="checkbox" data-task-material-select="${escapeHtml(task.id)}" ${productionTaskMaterialSelection.has(task.id)?'checked':''} aria-label="${escapeHtml(`${task.designName} ${task.sizeName} 発注計算に含める`)}">`:''}<div><div class="task-card-title">${task.starred?'★ ':''}${escapeHtml(task.designName)}</div><div class="task-card-sub">${escapeHtml(task.bodyName)} / ${escapeHtml(task.colorName)} / ${escapeHtml(task.sizeName)}</div></div></div><div class="task-badge-group"><span class="task-method-badge">${task.method==='outsourced'?'外注':'自社制作'}</span>${task.purpose==='order'?'<span class="task-purpose-badge">オーダー品</span>':''}</div></div>
       <div class="task-card-controls"><div><label class="field-label">数量</label><div class="task-qty-control"><button class="mini-qty-btn" type="button" data-task-delta="-1" data-task-id="${escapeHtml(task.id)}">−</button><input class="task-qty-input" type="number" min="0" inputmode="numeric" data-task-qty="${escapeHtml(task.id)}" value="${task.qty}"><button class="mini-qty-btn" type="button" data-task-delta="1" data-task-id="${escapeHtml(task.id)}">＋</button></div></div><div><label class="field-label">方法</label><select class="task-method-select" data-task-method="${escapeHtml(task.id)}"><option value="inhouse" ${task.method==='inhouse'?'selected':''}>自社</option><option value="outsourced" ${task.method==='outsourced'?'selected':''}>外注</option></select></div><div><label class="field-label">用途</label><select class="task-purpose-select" data-task-purpose="${escapeHtml(task.id)}"><option value="stock" ${task.purpose==='stock'?'selected':''}>在庫用</option><option value="order" ${task.purpose==='order'?'selected':''}>オーダー品</option></select></div></div>
@@ -5833,22 +5842,71 @@ function renderProductionTasks(){
   };
   const inhouseQty = inhouseRows.reduce((sum, task) => sum + Math.max(0, Number(task.qty || 0)), 0);
   const outsourcedQty = outsourcedRows.reduce((sum, task) => sum + Math.max(0, Number(task.qty || 0)), 0);
-  listBox.innerHTML = `${selectionOrderHtml}<div class="task-method-lists">
+  listBox.innerHTML = `<div id="task-selected-order-summary">${selectionOrderHtml}</div><div class="task-method-lists">
     <section class="task-method-section"><div class="task-method-section-head"><strong>自社制作</strong><span>${inhouseRows.length}件 / ${inhouseQty}枚</span></div>${renderTaskRows(inhouseRows,'自社制作タスクはありません。')}</section>
     <section class="task-method-section"><div class="task-method-section-head"><strong>外注</strong><span>${outsourcedRows.length}件 / ${outsourcedQty}枚</span></div>${renderTaskRows(outsourcedRows,'外注タスクはありません。')}</section>
   </div>`;
+
+  const syncMaterialSelectionControls = () => {
+    listBox.querySelectorAll('input[data-task-material-select]').forEach(input => {
+      const id = input.getAttribute('data-task-material-select') || '';
+      input.checked = productionTaskMaterialSelection.has(id);
+    });
+    listBox.querySelectorAll('input[data-task-design-material-select]').forEach(input => {
+      const designId = input.getAttribute('data-task-design-material-select') || '';
+      const designTasks = inhouseRows.filter(task => task.designId === designId);
+      const selectedCount = designTasks.reduce((sum,task)=>sum+(productionTaskMaterialSelection.has(task.id)?1:0),0);
+      input.checked = designTasks.length > 0 && selectedCount === designTasks.length;
+      input.indeterminate = selectedCount > 0 && selectedCount < designTasks.length;
+    });
+  };
+
+  const bindSelectionSummaryClear = () => {
+    listBox.querySelector('#task-material-selection-clear')?.addEventListener('click', () => {
+      productionTaskMaterialSelection.clear();
+      const summary = listBox.querySelector('#task-selected-order-summary');
+      if(summary) summary.innerHTML = buildSelectionOrderHtml();
+      syncMaterialSelectionControls();
+    });
+  };
+
+  const refreshMaterialSelectionUI = anchor => {
+    const beforeTop = anchor?.isConnected ? anchor.getBoundingClientRect().top : null;
+    const summary = listBox.querySelector('#task-selected-order-summary');
+    if(summary) summary.innerHTML = buildSelectionOrderHtml();
+    syncMaterialSelectionControls();
+    bindSelectionSummaryClear();
+    if(beforeTop !== null){
+      requestAnimationFrame(() => {
+        if(!anchor?.isConnected) return;
+        const afterTop = anchor.getBoundingClientRect().top;
+        const delta = afterTop - beforeTop;
+        if(Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+      });
+    }
+  };
+
+  syncMaterialSelectionControls();
+  bindSelectionSummaryClear();
 
   listBox.querySelectorAll('input[data-task-material-select]').forEach(input => input.addEventListener('change', () => {
     const id = input.getAttribute('data-task-material-select') || '';
     if(!id) return;
     if(input.checked) productionTaskMaterialSelection.add(id);
     else productionTaskMaterialSelection.delete(id);
-    renderProductionTasks();
+    refreshMaterialSelectionUI(input);
   }));
-  listBox.querySelector('#task-material-selection-clear')?.addEventListener('click', () => {
-    productionTaskMaterialSelection.clear();
-    renderProductionTasks();
-  });
+
+  listBox.querySelectorAll('input[data-task-design-material-select]').forEach(input => input.addEventListener('change', () => {
+    const designId = input.getAttribute('data-task-design-material-select') || '';
+    if(!designId) return;
+    const checked = input.checked;
+    inhouseRows.filter(task => task.designId === designId).forEach(task => {
+      if(checked) productionTaskMaterialSelection.add(task.id);
+      else productionTaskMaterialSelection.delete(task.id);
+    });
+    refreshMaterialSelectionUI(input);
+  }));
 
   listBox.querySelectorAll('button[data-task-delta]').forEach(btn => btn.addEventListener('click', async () => {
     const id = btn.getAttribute('data-task-id');

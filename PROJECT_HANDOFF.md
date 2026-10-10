@@ -215,6 +215,8 @@ Do not merge these semantics with direct inventory entry.
 Each in-house production task card has a transient checkbox for material-order calculation.
 
 - checked task IDs are held only in memory; they are not written to Firestore;
+- changing an individual task selection updates only the selected-material summary and checkbox states; it must not rerender the whole task screen or move the checked item on screen;
+- each in-house Design heading has a `すべて` checkbox that selects/deselects all current in-house task rows for that Design; partial selection is shown with the indeterminate checkbox state;
 - the calculator aggregates only checked in-house tasks;
 - blank Body demand is grouped by Body × Color × Size;
 - sheet demand is grouped by Design and only applies when that Design production method is `sheet`;
