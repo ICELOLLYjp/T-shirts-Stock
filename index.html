@@ -2537,7 +2537,7 @@
 
 <section id="view-blank" class="view-panel" hidden>
   <div class="section-title">未プリントボディ</div>
-  <div class="section-note">まだプリントしていないTシャツの在庫です。Bodyを選び、任意のColor・Sizeを自由に組み合わせて管理します。</div>
+  <div class="section-note">まだプリントしていないTシャツの在庫です。選択したBodyにColor設定で紐づいているColorだけを表示します。</div>
   <div class="master-select-row">
     <label class="field-label" for="blank-body-select">表示・入荷するBody</label>
     <select id="blank-body-select" class="master-select"></select>
@@ -4646,14 +4646,59 @@ function blankOrderGrandTotal(){
   return Object.keys(all).reduce((sum, bodyId) => sum + blankOrderTotalForBody(bodyId), 0);
 }
 
+function blankColorsForBody(bodyId){
+  if(!bodyId) return [];
+  return masterColors().filter(color => String(color?.bodyId || '') === String(bodyId));
+}
+
+function blankColorIdSetForBody(bodyId){
+  return new Set(blankColorsForBody(bodyId).map(color => color.id));
+}
+
+function blankMappedTotalForBody(bodyId){
+  const allowed = blankColorIdSetForBody(bodyId);
+  const body = masterDocument?.blank_stock?.[bodyId] || {};
+  let total = 0;
+  Object.entries(body).forEach(([colorId,sizeTree]) => {
+    if(!allowed.has(colorId)) return;
+    Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  });
+  return total;
+}
+
+function blankMappedOrderTotalForBody(bodyId){
+  const allowed = blankColorIdSetForBody(bodyId);
+  const body = masterDocument?.blank_orders?.[bodyId] || {};
+  let total = 0;
+  Object.entries(body).forEach(([colorId,sizeTree]) => {
+    if(!allowed.has(colorId)) return;
+    Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+  });
+  return total;
+}
+
+function blankMismatchedQtyForBody(bodyId){
+  const allowed = blankColorIdSetForBody(bodyId);
+  let total = 0;
+  [masterDocument?.blank_stock?.[bodyId] || {}, masterDocument?.blank_orders?.[bodyId] || {}].forEach(body => {
+    Object.entries(body).forEach(([colorId,sizeTree]) => {
+      if(allowed.has(colorId)) return;
+      Object.values(sizeTree || {}).forEach(cell => total += Math.max(0, Number(cell?.qty || 0)));
+    });
+  });
+  return total;
+}
+
 function receiptKey(bodyId, colorId, sizeId){
   return `${bodyId}|${colorId}|${sizeId}`;
 }
 
 function selectedReceiptEntries(bodyId = state.blankBodyId){
   const rows = [];
+  const allowed = blankColorIdSetForBody(bodyId);
   const orders = masterDocument?.blank_orders?.[bodyId] || {};
   Object.entries(orders).forEach(([colorId, sizeTree]) => {
+    if(!allowed.has(colorId)) return;
     Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
       const qty = Math.max(0, Number(cell?.qty || 0));
       const key = receiptKey(bodyId, colorId, sizeId);
@@ -4673,12 +4718,95 @@ function selectAllCurrentBodyOrders(){
   if(!bodyId) return;
   // 他Bodyの一時選択は解除し、今見ているBodyだけを選択する。
   blankReceiptSelection.clear();
+  const allowed = blankColorIdSetForBody(bodyId);
   const orders = masterDocument?.blank_orders?.[bodyId] || {};
   Object.entries(orders).forEach(([colorId, sizeTree]) => {
+    if(!allowed.has(colorId)) return;
     Object.entries(sizeTree || {}).forEach(([sizeId, cell]) => {
       if(Math.max(0, Number(cell?.qty || 0)) > 0) blankReceiptSelection.add(receiptKey(bodyId, colorId, sizeId));
     });
   });
+}
+
+function refreshBlankSummaryValues(){
+  const box = document.getElementById('blank-summary');
+  if(!box || !masterReady || !masterDocument) return;
+  const selected = state.blankBodyId || LEGACY_BODY_ID;
+  const receiptRows = selectedReceiptEntries(selected);
+  const receiptTotal = receiptRows.reduce((sum,row)=>sum+row.qty,0);
+  const selectedOrderTotal = blankMappedOrderTotalForBody(selected);
+
+  const setText = (selector,value) => {
+    const el = box.querySelector(selector);
+    if(el) el.textContent = String(value);
+  };
+  setText('[data-blank-summary-stock-body]', blankMappedTotalForBody(selected));
+  setText('[data-blank-summary-stock-all]', blankGrandTotal());
+  setText('[data-blank-summary-order-body]', selectedOrderTotal);
+  setText('[data-blank-summary-order-all]', blankOrderGrandTotal());
+  setText('[data-blank-summary-receipt-skus]', receiptRows.length);
+  setText('[data-blank-summary-receipt-total]', receiptTotal);
+
+  const selectAll = box.querySelector('#select-all-body-orders-btn');
+  const clear = box.querySelector('#clear-body-orders-btn');
+  const receive = box.querySelector('#receive-selected-body-orders-btn');
+  if(selectAll) selectAll.disabled = selectedOrderTotal <= 0;
+  if(clear) clear.disabled = receiptRows.length <= 0;
+  if(receive){
+    receive.disabled = receiptTotal <= 0;
+    receive.innerHTML = `選択した発注を入荷<br>${receiptTotal}枚`;
+  }
+}
+
+function syncBlankReceiptControls(){
+  const box = document.getElementById('blank-app');
+  if(!box) return;
+  const bodyId = state.blankBodyId || '';
+  box.querySelectorAll('input[data-receive-order]').forEach(input => {
+    const [colorId,sizeId] = String(input.getAttribute('data-receive-order') || '').split('|');
+    const order = Math.max(0, Number(masterDocument?.blank_orders?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
+    const key = receiptKey(bodyId,colorId,sizeId);
+    if(order <= 0) blankReceiptSelection.delete(key);
+    input.disabled = order <= 0;
+    input.checked = order > 0 && blankReceiptSelection.has(key);
+    const wrap = input.closest('.receipt-mini');
+    if(wrap) wrap.classList.toggle('disabled', order <= 0);
+  });
+}
+
+function refreshBlankRowTotals(colorId){
+  const box = document.getElementById('blank-app');
+  if(!box) return;
+  const row = box.querySelector(`tr[data-blank-color="${CSS.escape(colorId)}"]`);
+  if(!row) return;
+  const bodyId = state.blankBodyId || '';
+  const sizes = masterSizes();
+  const stockTotal = sizes.reduce((sum,size)=>sum+Math.max(0,Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[size.id]?.qty || 0)),0);
+  const orderTotal = sizes.reduce((sum,size)=>sum+Math.max(0,Number(masterDocument?.blank_orders?.[bodyId]?.[colorId]?.[size.id]?.qty || 0)),0);
+  const stockEl = row.querySelector('[data-blank-row-stock-total]');
+  const orderEl = row.querySelector('[data-blank-row-order-total]');
+  if(stockEl) stockEl.textContent = String(stockTotal);
+  if(orderEl) orderEl.textContent = String(orderTotal);
+}
+
+function refreshBlankTableFromState(){
+  const box = document.getElementById('blank-app');
+  if(!box) return;
+  const bodyId = state.blankBodyId || '';
+  box.querySelectorAll('tr[data-blank-color]').forEach(row => {
+    const colorId = row.getAttribute('data-blank-color') || '';
+    row.querySelectorAll('[data-blank-stock-value]').forEach(el => {
+      const [,sizeId] = String(el.getAttribute('data-blank-stock-value') || '').split('|');
+      el.textContent = String(Math.max(0,Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0)));
+    });
+    row.querySelectorAll('input[data-blank-order]').forEach(input => {
+      const [,sizeId] = String(input.getAttribute('data-blank-order') || '').split('|');
+      input.value = String(Math.max(0,Number(masterDocument?.blank_orders?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0)));
+    });
+    refreshBlankRowTotals(colorId);
+  });
+  syncBlankReceiptControls();
+  refreshBlankSummaryValues();
 }
 
 function renderBlankSummary(){
@@ -4686,14 +4814,16 @@ function renderBlankSummary(){
   if(!box) return;
   const selected = state.blankBodyId || LEGACY_BODY_ID;
   const bodyName = (masterDocument?.masters?.bodies || {})[selected]?.managementName || '未設定';
-  const selectedOrderTotal = blankOrderTotalForBody(selected);
+  const selectedOrderTotal = blankMappedOrderTotalForBody(selected);
   const receiptRows = selectedReceiptEntries(selected);
   const receiptTotal = receiptRows.reduce((sum, row) => sum + row.qty, 0);
+  const mismatchTotal = blankMismatchedQtyForBody(selected);
   box.innerHTML = `
-    <div class="mini-summary"><span>未プリント在庫　<strong>${escapeHtml(bodyName)}</strong> ${blankTotalForBody(selected)} 枚</span><span>全Body <strong>${blankGrandTotal()}</strong> 枚</span></div>
-    <div class="mini-summary"><span>発注数　<strong>${escapeHtml(bodyName)}</strong> ${selectedOrderTotal} 枚</span><span>全Body <strong>${blankOrderGrandTotal()}</strong> 枚</span></div>
+    <div class="mini-summary"><span>未プリント在庫　<strong>${escapeHtml(bodyName)}</strong> <strong data-blank-summary-stock-body>${blankMappedTotalForBody(selected)}</strong> 枚</span><span>全Body <strong data-blank-summary-stock-all>${blankGrandTotal()}</strong> 枚</span></div>
+    <div class="mini-summary"><span>発注数　<strong>${escapeHtml(bodyName)}</strong> <strong data-blank-summary-order-body>${selectedOrderTotal}</strong> 枚</span><span>全Body <strong data-blank-summary-order-all>${blankOrderGrandTotal()}</strong> 枚</span></div>
+    ${mismatchTotal > 0 ? `<div class="receipt-guide">Color設定の標準Bodyと一致しない旧データが ${mismatchTotal}枚あります。この表には表示せず、データ自体は削除していません。</div>` : ''}
     <div class="receipt-guide">入荷した商品は、下の各サイズにある「入荷対象」にチェックしてください。全部届いた場合は「発注中をすべて選択」でまとめて選べます。</div>
-    <div class="receipt-selection-summary">入荷対象：<strong>${receiptRows.length}</strong> SKU / <strong>${receiptTotal}</strong> 枚</div>
+    <div class="receipt-selection-summary">入荷対象：<strong data-blank-summary-receipt-skus>${receiptRows.length}</strong> SKU / <strong data-blank-summary-receipt-total>${receiptTotal}</strong> 枚</div>
     <div class="receipt-summary-actions">
       <button id="select-all-body-orders-btn" class="secondary-btn" type="button" ${selectedOrderTotal > 0 ? '' : 'disabled'}>発注中をすべて選択</button>
       <button id="clear-body-orders-btn" class="secondary-btn" type="button" ${receiptRows.length ? '' : 'disabled'}>選択解除</button>
@@ -4702,11 +4832,13 @@ function renderBlankSummary(){
 
   document.getElementById('select-all-body-orders-btn')?.addEventListener('click', () => {
     selectAllCurrentBodyOrders();
-    renderBlankStock();
+    syncBlankReceiptControls();
+    refreshBlankSummaryValues();
   });
   document.getElementById('clear-body-orders-btn')?.addEventListener('click', () => {
     blankReceiptSelection.clear();
-    renderBlankStock();
+    syncBlankReceiptControls();
+    refreshBlankSummaryValues();
   });
   document.getElementById('receive-selected-body-orders-btn')?.addEventListener('click', async () => {
     await receiveSelectedBodyOrders();
@@ -4742,7 +4874,7 @@ async function receiveSelectedBodyOrders(){
   if(saved === false) return false;
 
   alert(`${bodyName} の選択分 ${total}枚を未プリント在庫へ入荷しました。`);
-  renderBlankStock();
+  refreshBlankTableFromState();
   return true;
 }
 
@@ -4791,8 +4923,8 @@ function renderBlankStock(){
   }
   select.innerHTML = bodies.map(body => `<option value="${escapeHtml(body.id)}" ${body.id === state.blankBodyId ? 'selected' : ''}>${escapeHtml(body.managementName || body.id)}</option>`).join('');
 
-  // Body×Colorは自由な組み合わせ。選択Bodyでは全Colorを表示する。
-  const colors = masterColors();
+  // 未プリント在庫では、選択BodyにColor設定で紐づくColorだけを表示する。
+  const colors = blankColorsForBody(state.blankBodyId);
   const sizes = masterSizes();
   const bodyStock = masterDocument.blank_stock?.[state.blankBodyId] || {};
   const bodyOrders = masterDocument.blank_orders?.[state.blankBodyId] || {};
@@ -4801,11 +4933,11 @@ function renderBlankStock(){
       <table class="inventory-table" style="min-width:650px;">
         <thead><tr><th>Color</th>${sizes.map(s => `<th>${escapeHtml(s.managementName)}</th>`).join('')}<th>計</th></tr></thead>
         <tbody>
-          ${colors.map(color => {
+          ${colors.length ? colors.map(color => {
             const stockTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0)), 0);
             const orderTotal = sizes.reduce((sum, size) => sum + Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0)), 0);
-            return `<tr>
-              <td>${escapeHtml(color.managementName)}<div class="color-body-hint">標準: ${escapeHtml((masterDocument.masters?.bodies || {})[color.bodyId]?.managementName || '未設定')}</div></td>
+            return `<tr data-blank-color="${escapeHtml(color.id)}">
+              <td>${escapeHtml(color.managementName)}</td>
               ${sizes.map(size => {
                 const stock = Math.max(0, Number(bodyStock?.[color.id]?.[size.id]?.qty || 0));
                 const order = Math.max(0, Number(bodyOrders?.[color.id]?.[size.id]?.qty || 0));
@@ -4813,16 +4945,16 @@ function renderBlankStock(){
                 return `<td><div class="blank-cell-wrap">
                   <div class="blank-stock-control">
                     <button class="mini-qty-btn" type="button" data-blank-delta="-1" data-blank-key="${escapeHtml(key)}">−</button>
-                    <span class="mini-qty-val">${stock}</span>
+                    <span class="mini-qty-val" data-blank-stock-value="${escapeHtml(key)}">${stock}</span>
                     <button class="mini-qty-btn" type="button" data-blank-delta="1" data-blank-key="${escapeHtml(key)}">＋</button>
                   </div>
                   <div class="order-mini"><span class="order-mini-label">発注</span><input class="order-input" type="number" min="0" inputmode="numeric" data-blank-order="${escapeHtml(key)}" value="${order}"></div>
                   <div class="receipt-mini ${order > 0 ? '' : 'disabled'}"><label><input type="checkbox" data-receive-order="${escapeHtml(key)}" ${order > 0 && blankReceiptSelection.has(receiptKey(state.blankBodyId, color.id, size.id)) ? 'checked' : ''} ${order > 0 ? '' : 'disabled'}>入荷対象</label></div>
                 </div></td>`;
               }).join('')}
-              <td><div class="cell-total"><span>在庫 <strong>${stockTotal}</strong></span><span>発注 <strong>${orderTotal}</strong></span></div></td>
+              <td><div class="cell-total"><span>在庫 <strong data-blank-row-stock-total>${stockTotal}</strong></span><span>発注 <strong data-blank-row-order-total>${orderTotal}</strong></span></div></td>
             </tr>`;
-          }).join('')}
+          }).join('') : `<tr><td colspan="${sizes.length + 2}"><div class="production-empty">このBodyに紐づくColorがありません。管理 → Color設定で標準Bodyを設定してください。</div></td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -4836,8 +4968,15 @@ function renderBlankStock(){
       const current = Math.max(0, Number(masterDocument?.blank_stock?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
       const nextQty = Math.max(0, current + delta);
       btn.disabled = true;
-      await saveBlankQty(bodyId, colorId, sizeId, nextQty);
-      renderBlankStock();
+      const saved = await saveBlankQty(bodyId, colorId, sizeId, nextQty);
+      if(saved !== false){
+        const key = `${colorId}|${sizeId}`;
+        const valueEl = box.querySelector(`[data-blank-stock-value="${CSS.escape(key)}"]`);
+        if(valueEl) valueEl.textContent = String(nextQty);
+        refreshBlankRowTotals(colorId);
+        refreshBlankSummaryValues();
+      }
+      btn.disabled = false;
     });
   });
 
@@ -4847,16 +4986,26 @@ function renderBlankStock(){
       const key = receiptKey(state.blankBodyId, colorId, sizeId);
       if(input.checked) blankReceiptSelection.add(key);
       else blankReceiptSelection.delete(key);
-      renderBlankSummary();
+      refreshBlankSummaryValues();
     });
   });
 
   box.querySelectorAll('input[data-blank-order]').forEach(input => {
     input.addEventListener('change', async () => {
       const [colorId, sizeId] = input.getAttribute('data-blank-order').split('|');
+      const bodyId = state.blankBodyId;
+      const previous = Math.max(0, Number(masterDocument?.blank_orders?.[bodyId]?.[colorId]?.[sizeId]?.qty || 0));
       const qty = Math.max(0, parseInt(input.value, 10) || 0);
-      await saveBlankOrderQty(state.blankBodyId, colorId, sizeId, qty);
-      renderBlankStock();
+      input.disabled = true;
+      const saved = await saveBlankOrderQty(bodyId, colorId, sizeId, qty);
+      if(saved === false) input.value = String(previous);
+      else {
+        if(qty <= 0) blankReceiptSelection.delete(receiptKey(bodyId,colorId,sizeId));
+        refreshBlankRowTotals(colorId);
+        syncBlankReceiptControls();
+        refreshBlankSummaryValues();
+      }
+      input.disabled = false;
     });
   });
 }
