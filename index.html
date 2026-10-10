@@ -5275,6 +5275,7 @@ async function markSelectedDesignMaterialsOrdered(rows, designId, materialType){
       };
     });
     const totalQty = items.reduce((sum,item)=>sum+item.qty,0);
+    if(!confirm(`${designName} 用のBody ${totalQty}枚を発注済みとして登録しますか？\n現在の発注中数量へ追加し、Design別の発注記録を残します。`)) return false;
     records[recordId] = {
       id:recordId,
       designId,
@@ -5320,6 +5321,7 @@ async function markSelectedDesignMaterialsOrdered(rows, designId, materialType){
   item.updatedAt = orderedAt;
   sheetOrders[designId] = item;
   const totalQty = items.reduce((sum,row)=>sum+row.qty,0);
+  if(!confirm(`${designName} 用のシート ${totalQty}枚を発注済みとして登録しますか？\n現在のシート発注数へ追加し、Design別の発注記録を残します。`)) return false;
   records[recordId] = {
     id:recordId,
     designId,
@@ -6028,6 +6030,19 @@ function renderProductionTasks(){
     });
   };
 
+  const rerenderAfterMaterialOrder = designId => {
+    const before = listBox.querySelector(`[data-selected-order-design="${CSS.escape(designId)}"]`)?.getBoundingClientRect().top;
+    renderProductionTasks();
+    if(before == null) return;
+    requestAnimationFrame(() => {
+      const nextList = document.getElementById('plan-app');
+      const after = nextList?.querySelector(`[data-selected-order-design="${CSS.escape(designId)}"]`)?.getBoundingClientRect().top;
+      if(after == null) return;
+      const delta = after - before;
+      if(Math.abs(delta) > 0.5) window.scrollBy(0,delta);
+    });
+  };
+
   const bindSelectionSummaryActions = () => {
     listBox.querySelector('#task-material-selection-clear')?.addEventListener('click', () => {
       productionTaskMaterialSelection.clear();
@@ -6042,7 +6057,7 @@ function renderProductionTasks(){
       if(!designId) return;
       btn.disabled = true;
       const saved = await markSelectedDesignMaterialsOrdered(rows,designId,'body');
-      if(saved) renderProductionTasks();
+      if(saved) rerenderAfterMaterialOrder(designId);
       else btn.disabled = false;
     }));
 
@@ -6051,7 +6066,7 @@ function renderProductionTasks(){
       if(!designId) return;
       btn.disabled = true;
       const saved = await markSelectedDesignMaterialsOrdered(rows,designId,'sheet');
-      if(saved) renderProductionTasks();
+      if(saved) rerenderAfterMaterialOrder(designId);
       else btn.disabled = false;
     }));
   };
