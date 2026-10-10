@@ -194,15 +194,30 @@ Task screen presentation:
 When completing an in-house stock-production task:
 
 - blank Body stock decreases;
-- required print sheet stock decreases;
+- for Designs whose production method is `sheet`, required print sheet stock also decreases;
+- for `silkscreen` Designs, print-sheet stock is not displayed as a task requirement, does not limit producible quantity, and does not decrease on completion;
 - finished stock increases;
 - update source is recorded as production.
+
+The production-task screen lazily reads the single `products/tshirt` document once per app session when needed to resolve Design production methods. It does not add per-task reads or listeners.
 
 When the task purpose is `order`:
 
 - completing the task does not add the item to finished-goods inventory, because it is treated as direct delivery to the order.
 
 Do not merge these semantics with direct inventory entry.
+
+### Production purchase checklist
+
+The 制作 screen contains a compact, collapsible `発注リスト` derived from current in-house task shortages.
+
+- Body shortage rows show which Design names are consuming that Body / Color / Size.
+- Print-sheet shortage rows are created only for Designs whose production method is `sheet`; silkscreen Designs never create sheet purchase rows.
+- Each current shortage can be manually checked as `発注済み`.
+- Manual checks are stored in `tshirtStock/master.production_purchase_checks`.
+- The checkbox is tracking metadata only. It does not change `blank_orders`, `sheet_orders`, inventory, tasks, SKU, Orders, or cost.
+- Check keys include the current related task IDs and quantities, so a materially changed/new shortage does not silently inherit an old completed check.
+
 
 ---
 
