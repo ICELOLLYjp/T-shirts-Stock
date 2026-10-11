@@ -2601,7 +2601,7 @@ import {
   setPersistence, browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
+  getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, runTransaction,
   collection, getDocs, getDocsFromServer
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
@@ -2676,6 +2676,9 @@ function applyDisclosureState(root = document){
 let cloudReady = false;
 let sharedDocument = null;
 let masterDocument = null;
+// Independent of optimistic local masterDocument mutations.
+let masterBaseline = null, masterSaveBusy = false, masterSaveBlocked = false;
+import { saveInventoryEdit } from './inventory-concurrency.mjs';
 let masterReady = false;
 let masterError = null;
 let cloudSaveTimer = null;
@@ -3040,26 +3043,12 @@ async function ensureMasterDocument(){
     const snap = await getDoc(masterRef);
     if(snap.exists()){
       masterDocument = snap.data();
-      if(Number(masterDocument?.schemaVersion || 0) < SCHEMA_VERSION || !masterDocument?.masters || !masterDocument?.inventory_v2){
-        const patch = buildMasterMirrorPatch();
-        await updateDoc(masterRef, {
-          ...patch,
-          updatedAt: serverTimestamp(),
-          migratedAt: serverTimestamp()
-        });
-        masterDocument = { ...masterDocument, ...patch };
+      masterBaseline = structuredClone(masterDocument);
+      if(Number(masterDocument?.schemaVersion || 0) < SCHEMA_VERSION || !masterDocument?.masters || !masterDocument?.inventory_v2 || masterDocument?.inventoryAuthority !== 'master') {
+        throw new Error('在庫マスターの移行が必要です。自動変換は停止しています。');
       }
     } else {
-      createPreV2LocalBackup(sharedDocument || { designs: state.designs });
-      const v2 = buildV2SchemaFromLegacy(state.designs);
-      await setDoc(masterRef, {
-        ...v2,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        migratedAt: serverTimestamp(),
-        sourceDocument: 'tshirtStock/shared'
-      }, { merge: true });
-      masterDocument = v2;
+      throw new Error('在庫マスターがありません。管理者による移行が必要です。');
     }
     masterReady = true;
     await reconcileBodyAssignmentFromShared(true);
@@ -3695,11 +3684,11 @@ function masterTotalForColorName(designName, colorName, bodyId = null){
   return total;
 }
 
-function buildSharedDesignsFromMaster(){
-  const existing = structuredClone(state.designs || {});
-  const designs = masterDocument?.masters?.designs || {};
-  const colors = masterDocument?.masters?.colors || {};
-  const sizes = masterDocument?.masters?.sizes || {};
+function buildSharedDesignsFromMaster(source = masterDocument, sharedDesigns = state.designs){
+  const existing = structuredClone(sharedDesigns || {});
+  const designs = source?.masters?.designs || {};
+  const colors = source?.masters?.colors || {};
+  const sizes = source?.masters?.sizes || {};
   const next = {};
 
   Object.values(designs).forEach(dm => {
@@ -3716,9 +3705,9 @@ function buildSharedDesignsFromMaster(){
     };
   });
 
-  const bodyIds = Object.keys(masterDocument?.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
+  const bodyIds = Object.keys(source?.inventory_v2 || {}).filter(id => id !== LEGACY_BODY_ID);
   bodyIds.forEach(bodyId => {
-    const bodyTree = masterDocument.inventory_v2?.[bodyId] || {};
+    const bodyTree = source.inventory_v2?.[bodyId] || {};
     Object.entries(bodyTree).forEach(([designId, colorTree]) => {
       const dm = designs[designId];
       const designName = dm?.legacyKey || dm?.managementName;
@@ -3803,30 +3792,28 @@ async function syncProductionPlanToMaster(){
 }
 
 async function syncSharedFromMaster(){
-  if(!inventoryAuthorityActive() || !cloudReady) return false;
-  const next = buildSharedDesignsFromMaster();
-  const currentFingerprint = stockFingerprint(sharedDocument?.designs || state.designs || {});
-  const nextFingerprint = stockFingerprint(next);
-  state.designs = next;
-  saveLocal();
-  if(currentFingerprint === nextFingerprint){
-    renderCurrentView();
-    return true;
-  }
+  if(!cloudReady || !inventoryAuthorityActive() || masterSaveBusy || masterSaveBlocked) return false;
   try {
-    setSyncStatus('Pinkoi在庫へ同期中…');
-    await updateDoc(sharedRef, {
-      designs: next,
-      updatedAt: serverTimestamp(),
-      inventorySource: 'tshirtStock/master'
+    const result = await runTransaction(db, async tx => {
+      const master = await tx.get(masterRef), shared = await tx.get(sharedRef);
+      if(!master.exists() || !shared.exists()) throw new Error('在庫マスターを確認できません。');
+      const data = master.data(), old = shared.data();
+      if(data.inventoryAuthority !== 'master') throw new Error('在庫正本の移行が必要です。');
+      const designs = buildSharedDesignsFromMaster(data, old.designs);
+      if(stockFingerprint(old.designs) !== stockFingerprint(designs)) {
+        tx.update(sharedRef, {designs, updatedAt:serverTimestamp(), inventorySource:'tshirtStock/master', sourceInventoryRevision:data.inventoryRevision || 0});
+      }
+      return {...old, designs};
     });
-    sharedDocument = { ...(sharedDocument || {}), designs: next, inventorySource: 'tshirtStock/master' };
+    sharedDocument = result;
+    state.designs = result.designs;
+    saveLocal();
     setSyncStatus('共有済み', 'ok');
     renderCurrentView();
     return true;
-  } catch(error){
+  } catch(error) {
     console.error('master to shared sync failed', error);
-    setSyncStatus(`Pinkoi同期エラー：${error.code || 'unknown'}`, 'error');
+    setSyncStatus('派生在庫の同期未完了。実在庫の保存結果は正本で確認してください。', 'error');
     return false;
   }
 }
@@ -3980,27 +3967,38 @@ async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
 }
 
 async function saveMasterData(fields){
-  if(!masterReady || !masterDocument) return;
+  if(!masterReady || !masterBaseline || masterSaveBusy || masterSaveBlocked) {
+    alert('保存中、または未解決の保存エラーがあります。再読込して在庫を確認してください。');
+    return false;
+  }
+  const base = structuredClone(masterBaseline), desired = structuredClone(fields);
+  const operationId = crypto.randomUUID();
+  masterSaveBusy = true;
   try {
-    // fields はすべてトップレベルの完全な値として保存する。
-    // updateDoc を使うことで inventory_v2 などの Map 内で削除したキーも
-    // Firestore 側から確実に消える。setDoc + merge だと古いキーが残り、
-    // Body 振り分けのたびに二重計上される原因になる。
-    await updateDoc(masterRef, {
-      ...fields,
-      updatedAt: serverTimestamp()
-    });
-    masterDocument = { ...masterDocument, ...fields, updatedAt: nowIso() };
+    const api = { doc, runTransaction, serverTimestamp };
+    // Material/task transitions depend on a coherent observation of all inputs.
+    const strict = Object.keys(desired).some(k => ['blank_stock','print_sheets','production_tasks','blank_orders','sheet_orders'].includes(k));
+    let result;
+    for(let attempt=0; attempt<2; attempt++) {
+      try { result = await saveInventoryEdit(api, db, masterRef, base, desired, operationId, {strict}); break; }
+      catch(error) { if(attempt || !['unavailable','deadline-exceeded','unknown'].includes(error.code)) throw error; }
+    }
+    masterBaseline = structuredClone(result);
+    masterDocument = result;
     masterError = null;
     renderMasterUpdated(masterDocument.updatedAt);
     renderSchemaStatus(masterDocument);
     return true;
   } catch(error){
     masterError = error;
+    masterSaveBlocked = true;
+    try { localStorage.setItem('icelolly-inventory-unsaved-a1', JSON.stringify({operationId, base, fields:desired})); } catch(_) {}
     console.error('master data save failed', error);
+    setSyncStatus('保存未完了：再読込して在庫を確認してください', 'error');
+    alert(error.message || '保存できませんでした。再読込して在庫を確認してください。');
     renderSchemaStatus();
     return false;
-  }
+  } finally { masterSaveBusy = false; }
 }
 
 function renderDesignSettings(){
@@ -4350,6 +4348,7 @@ function sameInventoryTree(a, b){
 }
 
 async function reconcileBodyAssignmentFromShared(silent = false){
+  if(inventoryAuthorityActive()) return true; // Never import legacy aggregate into the canonical master.
   if(!masterReady || !masterDocument) return false;
   const result = buildCanonicalInventoryFromShared();
   if(!result.ok){
@@ -5766,8 +5765,8 @@ function setFinishedInventoryQtyTree(root, bodyId, designId, colorId, sizeId, qt
   if(!next[bodyId]) next[bodyId] = {};
   if(!next[bodyId][designId]) next[bodyId][designId] = {};
   if(!next[bodyId][designId][colorId]) next[bodyId][designId][colorId] = {};
-  if(qty > 0) next[bodyId][designId][colorId][sizeId] = { qty, updatedAt: nowIso(), updateSource };
-  else delete next[bodyId][designId][colorId][sizeId];
+  if(!Number.isSafeInteger(qty) || qty < 0) throw new Error('Invalid finished inventory quantity');
+  next[bodyId][designId][colorId][sizeId] = { qty, updatedAt: nowIso(), updateSource };
   return next;
 }
 
@@ -8885,39 +8884,8 @@ async function saveCloudNow(){
     return;
   }
 
-  setSyncStatus('同期中…');
-  try {
-    await updateDoc(sharedRef, {
-      designs: state.designs,
-      updatedAt: serverTimestamp()
-    });
-    sharedDocument = { ...(sharedDocument || {}), designs: state.designs };
-    setSyncStatus('共有済み', 'ok');
-  } catch(e){
-    console.error('shared save failed', e);
-    setSyncStatus(`在庫同期エラー：${e.code || 'unknown'}`, 'error');
-    return;
-  }
-
-  if(masterReady){
-    try {
-      const patch = buildMasterMirrorPatch();
-      await updateDoc(masterRef, {
-        ...patch,
-        updatedAt: serverTimestamp()
-      });
-      masterDocument = { ...(masterDocument || {}), ...patch };
-      masterError = null;
-      renderSchemaStatus(masterDocument);
-      renderMasterUpdated(masterDocument?.updatedAt);
-      if(state.activeView !== 'finished') renderCurrentView();
-    } catch(e){
-      console.error('master mirror save failed', e);
-      masterReady = false;
-      masterError = e;
-      renderSchemaStatus();
-    }
-  }
+  setSyncStatus('旧在庫形式の保存は停止しています。管理者に確認してください。', 'error');
+  return false;
 }
 
 function save(){
@@ -9418,7 +9386,9 @@ async function init(){
     if(masterReady){
       onSnapshot(masterRef, (snapshot) => {
         if(!snapshot.exists()) return;
+        if(snapshot.metadata.hasPendingWrites || masterSaveBusy || masterSaveBlocked) return;
         masterDocument = snapshot.data();
+        masterBaseline = structuredClone(masterDocument);
         masterError = null;
         masterReady = true;
         renderSchemaStatus(masterDocument);
