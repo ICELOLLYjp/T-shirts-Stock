@@ -499,6 +499,18 @@ During exceptional long holidays, if six business days cannot reasonably be met,
 
 This section records design intent, not evidence of direct manufacturer integration, shipping-time validation, or implemented checkout. Do not alter canonical stock or production tasks by editing documentation.
 
+## 14B. Supplier holiday calendar and sourcing coordination
+
+Approved 2026-10-11: Add an editable supplier-specific holiday and temporary shipment closure calendar to the existing **Website supplier stock/arrival administration**, not as a second authority in T shirts Stock. Store per supplier date ranges, source, last confirmation, uncertainty, notes and person who changed the record. This app consumes the shared sourcing calendar through a reviewed integration when relevant to its existing blank Body procurement tasks.
+
+Normal supplier dispatch for EC planning is the next eligible manufacturer dispatch day after the human purchase, excluding supplier Saturdays, Sundays and configured long holiday or exceptional blackout dates. Do not promise same-day dispatch even if the manufacturer sometimes supports orders by the user-reported '1 o'clock' deadline. A manufacturer dispatch record is **not** a confirmed material receipt. Actual arrival must be recorded using the existing blank stock receipt flow; never add supplier stock numbers to physical `blank_stock`.
+
+The website or shared lead-time service owns the customer-facing shipping calculation, combining verified supplier dispatch/arrival evidence with material availability, unfinished production tasks, five-shirts-per-production-workday capacity, and ICELOLLY travel and workday closures. The standard sourcing plus production expectation remains within six eligible business days when credible. During major holidays, use grounded dates if available; if arrival or lead time is unknown, offer inquiry-only for affected supplier-procured items instead of a speculative six-day promise. Existing finished stock and producible goods from on-hand materials remain unaffected by supplier shutdown.
+
+A supplier-calendar edit should trigger recomputation for the affected variants, warn staff about new exceptions and potentially late paid work, and preserve every paid order's original promised shipping date until human-reviewed customer contact. Do not duplicate order, supplier calendar, or inventory ledgers in this app.
+
+This is a requirement for later implementation and testing, not a claim that holiday entry, scheduling, supplier polling or automatic stock/sale-state changes already work.
+
 ## 15. Event allocation held out of EC saleable finished stock
 
 Agreed 2026-10-11: Finished shirts taken to events must be excluded from EC finished goods availability by a reservation linked to Sales Manager Session and stable Body, Design, Color and Size IDs. This event hold is not a physical stock decrement. Continue to use `tshirtStock/master.inventory_v2` as canonical finished company stock; event exact SKU sales already reduce physical stock through the approved Sales Manager path. Coordinated hold changes must never subtract the same sale twice.
