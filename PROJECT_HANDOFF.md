@@ -470,3 +470,19 @@ Do not write directly from a public website request into the full `inventory_v2`
 5. Do not duplicate customer facing product copy or images here unless they are operationally required.
 6. Online prices and event prices may differ. Do not make this app the implicit authority for every sales channel price.
 7. Before changing a shared contract, inspect the latest Website policy and Sales Manager handoff in addition to this file.
+
+## 14. EC orders and future operations app boundary
+
+Recorded: 2026-10-11. Shared design reference: `ICELOLLYjp/Website/docs/EC_APP_RESPONSIBILITIES.md`. Consult that policy, `Website/DATA_AUTHORITY.md`, this handoff and the latest affected application code before changing shared behavior.
+
+T shirts Stock remains the authoritative inventory and production app and must retain the fast stock first iPhone UI. Reuse existing `production_tasks`, `customer_orders`, `blank_stock`, `blank_orders`, `print_sheets`, `sheet_orders`, `production_purchase_records` and Body, Design, Color, Size master data. Do not create a second production task or material procurement ledger just for ecommerce.
+
+WooCommerce remains the authority for customer facing order, payment, price and shipping state. An EC order may create or update a linked operational `customer_orders` record and a `production_tasks` task with `purpose: order`, but each link must retain stable WooCommerce order and line item IDs, be idempotent and preserve the difference between production for stock and production for a customer order. Order production completion must not inflate finished goods stock.
+
+Physical finished items, blank Body stock, printing materials, allocated material, open purchases and supplier available quantities are different facts. Supplier stock is an external dated observation, not local blank Body stock. Manufacturing and materials reservations must prevent double allocation across event POS and web checkout; do not count a planned task as finished inventory. New Body registration belongs to the shared Body master in this app, not a duplicate WordPress master.
+
+The agreed ecommerce rules require a production capacity of five T shirts per available business day, adding time for each additional group of five, and nominal three business day shipping when required materials are on hand, or six business days when verified standard supplier sourcing and production are possible. Calculating the customer shipping date is a website or shared scheduling service concern, using current production workload and Google Calendar based nonproduction dates. This app provides capacity, task and material facts rather than a second independent customer facing lead time calculator.
+
+Manufacturer ordering begins with an automatically generated procurement task after valid paid web orders; a person performs the supplier order. Adapt existing purchase task and purchase history logic before implementing any new order feature. The proposed EC operations application is a future unified UI, not a replacement stock authority or task ledger.
+
+These are approved design requirements, not proof of implemented EC checkout, reservations, supplier automation or order to production sync. Do not alter production inventory or activate storefront sales from a documentation change.
