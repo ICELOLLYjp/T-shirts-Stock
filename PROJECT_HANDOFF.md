@@ -489,7 +489,7 @@ These are approved design requirements, not proof of implemented EC checkout, re
 
 ## 14A. Manufacturer sourcing calendar and six-day EC dispatch target
 
-Agreed on 2026-10-11: For the user's normal manufacturer sourcing, the manufacturer generally dispatches the day following order placement, except it does not dispatch on Saturdays or Sundays. Extraordinary closure during extended holiday periods may delay shipment. Do not assume cutoff times, public holiday operation or delivery transit times without confirmation.
+Agreed on 2026-10-11: The user reports manufacturer same-day dispatch is available for orders placed by '1 o'clock' (AM/PM not explicitly stated), but the manufacturer does not dispatch on Saturdays or Sundays. **The ecommerce dispatch-date estimate deliberately does not rely on same-day manufacturer dispatch.** Use the next manufacturer dispatch-eligible day after ordering as the earliest planning assumption, excluding weekends and additionally verified extended holiday shutdowns. Do not assume actual receipt on the manufacturer dispatch date, public holiday service, or transit time without confirmation.
 
 The standard EC customer dispatch goal for manufactured-on-order T shirts remains **within six eligible ICELOLLY business days total**, encompassing sourcing and in-house production work, not six days plus the production lead time. Distinguish (a) placing supplier order, (b) manufacturer dispatch, (c) actual material receipt, (d) physical production and (e) ICELOLLY dispatch. Manufacturer dispatch never creates local blank Body inventory. Record physical receipt only when confirmed.
 
