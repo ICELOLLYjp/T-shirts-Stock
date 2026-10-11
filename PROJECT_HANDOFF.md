@@ -487,6 +487,18 @@ Manufacturer ordering begins with an automatically generated procurement task af
 
 These are approved design requirements, not proof of implemented EC checkout, reservations, supplier automation or order to production sync. Do not alter production inventory or activate storefront sales from a documentation change.
 
+## 14A. Manufacturer sourcing calendar and six-day EC dispatch target
+
+Agreed on 2026-10-11: For the user's normal manufacturer sourcing, the manufacturer generally dispatches the day following order placement, except it does not dispatch on Saturdays or Sundays. Extraordinary closure during extended holiday periods may delay shipment. Do not assume cutoff times, public holiday operation or delivery transit times without confirmation.
+
+The standard EC customer dispatch goal for manufactured-on-order T shirts remains **within six eligible ICELOLLY business days total**, encompassing sourcing and in-house production work, not six days plus the production lead time. Distinguish (a) placing supplier order, (b) manufacturer dispatch, (c) actual material receipt, (d) physical production and (e) ICELOLLY dispatch. Manufacturer dispatch never creates local blank Body inventory. Record physical receipt only when confirmed.
+
+Supply source observations and holiday exception notices must be distinguished from local `blank_stock`, open `blank_orders` and current `production_tasks`. Supplier availability must not imply secured delivery dates. Expose existing task queue and material needs to the website scheduling integration so it can calculate an honest promised date based on procurement, actual materials, a five-shirt-per-production-business-day capacity and travel/holiday closures. Manufacturer closure days are distinct from ICELOLLY production blackout dates.
+
+During exceptional long holidays, if six business days cannot reasonably be met, display an adjusted truthful schedule only when it is grounded; if the lead time or delivery is unknown, use an inquiry-only customer state, not a speculative six-day purchase promise. For orders already paid, alert staff to an anticipated miss and prepare human-reviewed customer contact rather than silently changing the original promise.
+
+This section records design intent, not evidence of direct manufacturer integration, shipping-time validation, or implemented checkout. Do not alter canonical stock or production tasks by editing documentation.
+
 ## 15. Event allocation held out of EC saleable finished stock
 
 Agreed 2026-10-11: Finished shirts taken to events must be excluded from EC finished goods availability by a reservation linked to Sales Manager Session and stable Body, Design, Color and Size IDs. This event hold is not a physical stock decrement. Continue to use `tshirtStock/master.inventory_v2` as canonical finished company stock; event exact SKU sales already reduce physical stock through the approved Sales Manager path. Coordinated hold changes must never subtract the same sale twice.
