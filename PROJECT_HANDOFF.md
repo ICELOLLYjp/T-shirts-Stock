@@ -486,3 +486,11 @@ The agreed ecommerce rules require a production capacity of five T shirts per av
 Manufacturer ordering begins with an automatically generated procurement task after valid paid web orders; a person performs the supplier order. Adapt existing purchase task and purchase history logic before implementing any new order feature. The proposed EC operations application is a future unified UI, not a replacement stock authority or task ledger.
 
 These are approved design requirements, not proof of implemented EC checkout, reservations, supplier automation or order to production sync. Do not alter production inventory or activate storefront sales from a documentation change.
+
+## 15. Event allocation held out of EC saleable finished stock
+
+Agreed 2026-10-11: Finished shirts taken to events must be excluded from EC finished goods availability by a reservation linked to Sales Manager Session and stable Body, Design, Color and Size IDs. This event hold is not a physical stock decrement. Continue to use `tshirtStock/master.inventory_v2` as canonical finished company stock; event exact SKU sales already reduce physical stock through the approved Sales Manager path. Coordinated hold changes must never subtract the same sale twice.
+
+Preserve current production task overlays and blank Body or print sheet inventory as separate facts. Held finished goods cannot be offered as in hand finished stock online, but separately producible shirts may still be offered subject to material reservations and shipping capacity. Unknown and zero remain different states. Offline event sale effects need safe reconciliation against reservations rather than guessed SKU mapping.
+
+Reuse current Sales Manager event inventory and company inventory adapter functions. Hold start and release timing remain undecided and require user confirmation. This documentation change does not edit any inventory values.
