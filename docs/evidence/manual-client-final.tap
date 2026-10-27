@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: U01 lost reply and reload lookup same operation, never silently sends new intent
+ok 1 - U01 lost reply and reload lookup same operation, never silently sends new intent
+  ---
+  duration_ms: 5.5663
+  type: 'test'
+  ...
+# Subtest: U02 unknown result retains ID; explicit retry uses identical payload
+ok 2 - U02 unknown result retains ID; explicit retry uses identical payload
+  ---
+  duration_ms: 0.9877
+  type: 'test'
+  ...
+# Subtest: U03 conflict clears rejected intent, no automatic retry
+ok 3 - U03 conflict clears rejected intent, no automatic retry
+  ---
+  duration_ms: 0.4333
+  type: 'test'
+  ...
+# Subtest: U04 forged receipt conflict and invalid success keep pending
+ok 4 - U04 forged receipt conflict and invalid success keep pending
+  ---
+  duration_ms: 0.6435
+  type: 'test'
+  ...
+# Subtest: U05 storage failure prevents request
+ok 5 - U05 storage failure prevents request
+  ---
+  duration_ms: 0.2617
+  type: 'test'
+  ...
+# Subtest: U06 actual quantity UI entry selects API and never calls full-map fallback
+ok 6 - U06 actual quantity UI entry selects API and never calls full-map fallback
+  ---
+  duration_ms: 11.811
+  type: 'test'
+  ...
+# Subtest: U07 actual legacy save entry refuses in method B mode before direct transaction
+ok 7 - U07 actual legacy save entry refuses in method B mode before direct transaction
+  ---
+  duration_ms: 2.9656
+  type: 'test'
+  ...
+# Subtest: U08 shipped configuration is disabled
+ok 8 - U08 shipped configuration is disabled
+  ---
+  duration_ms: 1.5489
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 139.0034

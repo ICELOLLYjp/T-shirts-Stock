@@ -1,0 +1,161 @@
+TAP version 13
+# Subtest: 1 different SKUs: both edits survive a real optimistic retry
+ok 1 - 1 different SKUs: both edits survive a real optimistic retry
+  ---
+  duration_ms: 10.8204
+  type: 'test'
+  ...
+# Subtest: 2 same SKU: two deltas accumulate; stale absolute edit is rejected
+ok 2 - 2 same SKU: two deltas accumulate; stale absolute edit is rejected
+  ---
+  duration_ms: 2.5881
+  type: 'test'
+  ...
+# Subtest: 3 stale full save preserves untouched remote SKU and metadata
+ok 3 - 3 stale full save preserves untouched remote SKU and metadata
+  ---
+  duration_ms: 1.7596
+  type: 'test'
+  ...
+# Subtest: 4 POS then inventory screen: same SKU cannot restore sold stock
+ok 4 - 4 POS then inventory screen: same SKU cannot restore sold stock
+  ---
+  duration_ms: 1.0456
+  type: 'test'
+  ...
+# Subtest: 5 cancellation vs adjustment: no lost cancellation
+ok 5 - 5 cancellation vs adjustment: no lost cancellation
+  ---
+  duration_ms: 0.9878
+  type: 'test'
+  ...
+# Subtest: 6 production is atomic with resources/task; conflict changes none
+ok 6 - 6 production is atomic with resources/task; conflict changes none
+  ---
+  duration_ms: 1.4273
+  type: 'test'
+  ...
+# Subtest: 7 explicit zero, absent cell, null and unknown remain distinct
+ok 7 - 7 explicit zero, absent cell, null and unknown remain distinct
+  ---
+  duration_ms: 0.3217
+  type: 'test'
+  ...
+# Subtest: 8 failure before commit then retry applies once
+ok 8 - 8 failure before commit then retry applies once
+  ---
+  duration_ms: 1.1578
+  type: 'test'
+  ...
+# Subtest: 9 lost reply + intervening sale + duplicate retry never restores stock
+ok 9 - 9 lost reply + intervening sale + duplicate retry never restores stock
+  ---
+  duration_ms: 1.4605
+  type: 'test'
+  ...
+# Subtest: accessory IDs merge independently, delete conflicts, unknown preserved
+ok 10 - accessory IDs merge independently, delete conflicts, unknown preserved
+  ---
+  duration_ms: 2.4483
+  type: 'test'
+  ...
+# Subtest: legacy whole-document update denied by modeled gate; adapter refuses blind write
+ok 11 - legacy whole-document update denied by modeled gate; adapter refuses blind write
+  ---
+  duration_ms: 1.0505
+  type: 'test'
+  ...
+# Subtest: pending accessory edit rebases without reapplying stale remote fields
+ok 12 - pending accessory edit rebases without reapplying stale remote fields
+  ---
+  duration_ms: 0.1935
+  type: 'test'
+  ...
+# master data save failed Error: 在庫が他の操作で変更されました。再読込して入力を確認してください。 inventory_v2/b/d/c/s
+#     at conflict (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:9:17)
+#     at mergeEdit (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:45:36)
+#     at mergeEdit (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:40:21)
+#     at mergeEdit (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:40:21)
+#     at mergeEdit (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:40:21)
+#     at mergeEdit (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:40:21)
+#     at preparePatch (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:53:54)
+#     at file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/inventory-concurrency.mjs:71:42
+#     at async Object.runTransaction (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/tests/inventory-concurrency.test.mjs:40:24)
+#     at async saveMasterData (eval at appFunction (file:///C:/Users/hirop/.codex/.chatgpt-projects/g-p-6acc1992239c8191af960631573db97a/producer-tshirt-20261027/tests/inventory-concurrency.test.mjs:156:10), <anonymous>:18:22) {
+#   code: 'inventory-conflict'
+# }
+# Subtest: actual saveMasterData uses independent baseline, not optimistic local data
+ok 13 - actual saveMasterData uses independent baseline, not optimistic local data
+  ---
+  duration_ms: 4.9552
+  type: 'test'
+  ...
+# Subtest: actual production completion consumes materials and removes task once
+ok 14 - actual production completion consumes materials and removes task once
+  ---
+  duration_ms: 3.5387
+  type: 'test'
+  ...
+# Subtest: actual finished cell setter retains explicit zero
+ok 15 - actual finished cell setter retains explicit zero
+  ---
+  duration_ms: 2.2218
+  type: 'test'
+  ...
+# Subtest: U01 lost reply and reload lookup same operation, never silently sends new intent
+ok 16 - U01 lost reply and reload lookup same operation, never silently sends new intent
+  ---
+  duration_ms: 3.6049
+  type: 'test'
+  ...
+# Subtest: U02 unknown result retains ID; explicit retry uses identical payload
+ok 17 - U02 unknown result retains ID; explicit retry uses identical payload
+  ---
+  duration_ms: 0.4407
+  type: 'test'
+  ...
+# Subtest: U03 conflict clears rejected intent, no automatic retry
+ok 18 - U03 conflict clears rejected intent, no automatic retry
+  ---
+  duration_ms: 0.1972
+  type: 'test'
+  ...
+# Subtest: U04 forged receipt conflict and invalid success keep pending
+ok 19 - U04 forged receipt conflict and invalid success keep pending
+  ---
+  duration_ms: 0.3634
+  type: 'test'
+  ...
+# Subtest: U05 storage failure prevents request
+ok 20 - U05 storage failure prevents request
+  ---
+  duration_ms: 0.2012
+  type: 'test'
+  ...
+# Subtest: U06 actual quantity UI entry selects API and never calls full-map fallback
+ok 21 - U06 actual quantity UI entry selects API and never calls full-map fallback
+  ---
+  duration_ms: 9.0536
+  type: 'test'
+  ...
+# Subtest: U07 actual legacy save entry refuses in method B mode before direct transaction
+ok 22 - U07 actual legacy save entry refuses in method B mode before direct transaction
+  ---
+  duration_ms: 2.9746
+  type: 'test'
+  ...
+# Subtest: U08 shipped configuration is disabled
+ok 23 - U08 shipped configuration is disabled
+  ---
+  duration_ms: 1.7408
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 132.1136

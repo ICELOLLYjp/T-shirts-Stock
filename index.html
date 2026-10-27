@@ -2679,6 +2679,39 @@ let masterDocument = null;
 // Independent of optimistic local masterDocument mutations.
 let masterBaseline = null, masterSaveBusy = false, masterSaveBlocked = false;
 import { saveInventoryEdit } from './inventory-concurrency.mjs';
+import { createManualInventoryClient } from './manual-inventory-client.mjs';
+import { manualInventoryEndpoint } from './manual-inventory-config.mjs';
+let manualInventoryClient=null;
+const methodBRequired=()=>Boolean(manualInventoryEndpoint || masterDocument?.inventoryReservationAuthority===1);
+async function saveFinishedViaMethodB(sku,quantity){
+  if(!manualInventoryEndpoint || !auth.currentUser || masterSaveBusy) {
+    alert('在庫API未接続、未認証、または保存中です。数量は保存していません。');return false;
+  }
+  const uid=auth.currentUser.uid;
+  manualInventoryClient=createManualInventoryClient({endpoint:manualInventoryEndpoint,storage:localStorage,key:'icelolly-manual-method-b-v1:'+uid,
+    getToken:()=>{if(auth.currentUser?.uid!==uid)throw new Error('認証が変わりました');return auth.currentUser.getIdToken();}});
+  masterSaveBusy=true;
+  try {
+    const expectedQuantity=masterBaseline?.inventory_v2?.[sku.bodyId]?.[sku.designId]?.[sku.colorId]?.[sku.sizeId]?.qty;
+    const expectedRevision=masterBaseline?.inventoryRevision;
+    if(!Number.isSafeInteger(expectedQuantity) || expectedQuantity<0 || !Number.isSafeInteger(expectedRevision)) throw new Error('在庫またはrevisionが未確認です。再読込してください。');
+    let result=await manualInventoryClient.submit({sku,expectedQuantity,expectedRevision,quantity});
+    if(result.status==='unknown' && confirm('前回の保存結果は不明です。前回と同じ操作ID・数量で再照会を兼ねた再送をしますか？')) {
+      result=await manualInventoryClient.retryPending();
+      if(result.status==='saved')result.status='recovered';
+    }
+    if(['saved','recovered','conflict'].includes(result.status)) {
+      const fresh=await getDocFromServer(masterRef);if(!fresh.exists())throw new Error('在庫正本がありません');
+      masterDocument=fresh.data();masterBaseline=structuredClone(masterDocument);masterSaveBlocked=false;
+      renderSchemaStatus(masterDocument);renderMasterUpdated(masterDocument.updatedAt);
+    }
+    if(result.status==='conflict') {alert('他の更新と競合しました。最新在庫を読み込みました。数量を確認して、もう一度明示的に入力してください。');return false;}
+    if(result.status==='recovered') {alert('前回の保存結果を確認しました。今回入力した数量は再確認してください。');return false;}
+    if(result.status!=='saved') {alert('保存結果は未確認です。次の数量保存時に前回の操作を照会します。');return false;}
+    return true;
+  } catch(error) {setSyncStatus('保存未確認：同じ操作IDで結果照会が必要です','error');alert(error.message);return false;}
+  finally {masterSaveBusy=false;}
+}
 let masterReady = false;
 let masterError = null;
 let cloudSaveTimer = null;
@@ -3863,6 +3896,7 @@ async function setFinishedInventoryAbsolute(bodyId, designId, colorId, sizeId, r
   if(!inventoryAuthorityActive()) return false;
   const qty = Number(requestedQty);
   if(!Number.isInteger(qty) || qty < 0) return false;
+  if(methodBRequired()) return await saveFinishedViaMethodB({bodyId,designId,colorId,sizeId},qty);
   const inventory = structuredClone(masterDocument?.inventory_v2 || {});
   const next = setFinishedInventoryQtyTree(inventory, bodyId, designId, colorId, sizeId, qty, 'direct_input');
   const meta = setInventoryColorMetaTree(masterDocument?.inventory_color_meta || {}, bodyId, designId, colorId, 'direct_input');
@@ -3967,6 +4001,7 @@ async function applyFinishedPlusMode(designName, colorName, sizeName, bodyId){
 }
 
 async function saveMasterData(fields){
+  if(methodBRequired()) {alert('共通在庫API移行中のため、この旧保存経路は停止しています。');return false;}
   if(!masterReady || !masterBaseline || masterSaveBusy || masterSaveBlocked) {
     alert('保存中、または未解決の保存エラーがあります。再読込して在庫を確認してください。');
     return false;
