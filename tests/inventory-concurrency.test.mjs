@@ -151,6 +151,7 @@ test('pending accessory edit rebases without reapplying stale remote fields',()=
 });
 
 function appFunction(html, start, end, env) {
+  env.methodBRequired ??= ()=>false; // Existing A1-mode regression fixtures.
   const code=html.slice(html.indexOf(start),html.indexOf(end,html.indexOf(start)));
   return Function('env','with(env){return ('+code+');}')(env);
 }
